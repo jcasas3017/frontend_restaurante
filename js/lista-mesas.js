@@ -6,11 +6,13 @@
 (() => {
     const TOTAL_MESAS_TABLERO = 15;
     const DEFAULT_UBICACION = 'Salón principal';
+    const RESERVA_DURACION_MINUTOS = 120;
     const api = window.ListaMesasApi || null;
     const state = {
         rows: [],
         selected: null,
         dataSource: 'local',
+        fechaHoraFiltro: '',
         catalogs: {
             clientes: null,
             mozos: null,
@@ -24,6 +26,8 @@
     function init() {
         const btnActualizar = byId('btnActualizarListaMesas');
         if (btnActualizar) btnActualizar.addEventListener('click', render);
+
+        initDateTimeFilters();
 
         const board = byId('listaMesasBoard');
         if (board) {
@@ -49,7 +53,10 @@
         const count = byId('listaMesasCount');
         if (!board) return;
 
-        const mesas = await buildBoardMesas();
+        const fechaHoraReferencia = getSelectedFechaHoraIso();
+        state.fechaHoraFiltro = fechaHoraReferencia;
+
+        const mesas = await buildBoardMesas(fechaHoraReferencia);
         state.rows = mesas;
 
         board.innerHTML = mesas.map((mesa) => `
@@ -63,6 +70,7 @@
 
         renderLegendCounts(mesas);
         initTooltips(board);
+        renderFiltroActual(fechaHoraReferencia);
 
         if (count) {
             count.textContent = `Mostrando ${mesas.length} mesas`; 
@@ -113,10 +121,10 @@
         return formatted.message || fallback || 'No se pudo completar la operación.';
     }
 
-    async function buildBoardMesas() {
+    async function buildBoardMesas(fechaHoraReferencia) {
         if (apiAvailable()) {
             try {
-                const response = await api.getTablero(api.toIsoSeconds());
+                const response = await api.getTablero(fechaHoraReferencia);
                 const rows = Array.isArray(response?.data) ? response.data.map(mapApiMesaToBoardRow) : [];
                 state.dataSource = 'api';
                 if (rows.length) return rows;
@@ -126,10 +134,10 @@
         }
 
         state.dataSource = 'local';
-        return buildBoardMesasLocal();
+        return buildBoardMesasLocal(fechaHoraReferencia);
     }
 
-    function buildBoardMesasLocal() {
+    function buildBoardMesasLocal(fechaHoraReferencia) {
         const mesasDb = DB.getAll('mesas');
         const atenciones = DB.getAll('atenciones');
         const reservas = DB.getAll('reservas');
@@ -146,7 +154,7 @@
         }
 
         return mesaBase.map(({ numero, codigo, mesaReal }) => {
-            const context = resolveMesaContext(numero, mesaReal, atenciones, reservas);
+            const context = resolveMesaContext(numero, mesaReal, atenciones, reservas, fechaHoraReferencia);
             return {
                 numero,
                 codigo,
@@ -220,7 +228,7 @@
         };
     }
 
-    function resolveMesaContext(numero, mesaReal, atenciones, reservas) {
+    function resolveMesaContext(numero, mesaReal, atenciones, reservas, fechaHoraReferencia) {
         if (mesaReal && mesaReal.activa === false) {
             return {
                 estado: 'nodisponible',
@@ -230,6 +238,7 @@
         }
 
         const mesaId = Number(mesaReal.id || 0);
+        const fechaHoraRefTs = toTimestamp(fechaHoraReferencia);
 
         const atencionActiva = atenciones.find((atencion) => {
             const estado = String(atencion.estado || '').toLowerCase();
@@ -247,7 +256,10 @@
 
         const reservasMesa = reservas.filter((reserva) => {
             const estado = String(reserva.estado || '').toLowerCase();
-            return mesaId > 0 && Number(reserva.id_mesa) === mesaId && !estado.includes('cancel');
+            return mesaId > 0
+                && Number(reserva.id_mesa) === mesaId
+                && !estado.includes('cancel')
+                && isReservaVigenteEnFechaHora(reserva, fechaHoraRefTs);
         });
         const reservaActiva = reservasMesa.sort((a, b) => toTimestamp(a.fecha_hora) - toTimestamp(b.fecha_hora))[0] || null;
 
@@ -282,10 +294,11 @@
 
     async function handleMesaClick(mesa) {
         state.selected = mesa;
+        const fechaHoraReferencia = state.fechaHoraFiltro || getSelectedFechaHoraIso();
 
         if (apiAvailable() && mesa && mesa.mesaReal && mesa.mesaReal.id) {
             try {
-                const response = await api.getContextoMesa(mesa.mesaReal.id, api.toIsoSeconds());
+                const response = await api.getContextoMesa(mesa.mesaReal.id, fechaHoraReferencia);
                 mesa.contextoApi = normalizeApiContext(response?.data);
             } catch {
                 mesa.contextoApi = null;
@@ -480,7 +493,7 @@
             <div class="lm-block mb-3">
                 <h6 class="lm-block-title">Datos de cobro</h6>
                 <div class="lm-line"><span>Mesa</span><strong>${escapeHtml(mesa.codigo)}</strong></div>
-                <div class="lm-line"><span>Atención</span><strong>#${Number(atencion.id)}</strong></div>
+                <div class="lm-line"><span>Atención</span><strong>#${escapeHtml(formatRecordId(atencion.id))}</strong></div>
                 <div class="lm-line"><span>Tipo de pago</span><strong>${escapeHtml(metodoPago)}</strong></div>
                 <div class="lm-line"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
                 <div class="lm-line"><span>Propina</span><strong>${money(propinaOk)}</strong></div>
@@ -604,7 +617,7 @@
             </head>
             <body>
                 <h3>Comprobante de Pago</h3>
-                <div class="line"><span>N° comprobante</span><strong>#${Number(comprobante.id)}</strong></div>
+                <div class="line"><span>N° comprobante</span><strong>#${escapeHtml(formatRecordId(comprobante.id))}</strong></div>
                 <div class="line"><span>Fecha</span><strong>${escapeHtml(formatDateTime(comprobante.fecha))}</strong></div>
                 <div class="line"><span>Mesa</span><strong>${escapeHtml(mesaTexto)}</strong></div>
                 <div class="line"><span>Cliente</span><strong>${escapeHtml(cliente ? `${cliente.nombres} ${cliente.apellidos}` : 'Consumidor final')}</strong></div>
@@ -642,12 +655,21 @@
             <div class="row g-3">
                 <div class="col-12"><div class="alert alert-info mb-0">Registrar ocupación para ${mesa.codigo} y agregar pedidos iniciales.</div></div>
                 <div class="col-md-6">
-                    <label class="form-label">Cliente</label>
-                    <select class="form-select" id="lmClienteSelect">${buildClientesOptions(state.catalogs.clientes)}</select>
+                    <label class="form-label">Buscar cliente por documento</label>
+                    <div class="input-group">
+                        <input class="form-control" id="lmClienteDocumentoInput" placeholder="Ej: 71234567" maxlength="20">
+                        <button class="btn btn-outline-secondary" type="button" id="lmBuscarClienteBtn"><i class="bi bi-search"></i></button>
+                    </div>
+                    <input type="hidden" id="lmClienteSelect" value="">
+                    <div class="form-text">Selecciona un cliente existente antes de ocupar la mesa.</div>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Mozo</label>
                     <select class="form-select" id="lmMozoSelect">${buildMozosOptions(state.catalogs.mozos)}</select>
+                </div>
+                <div class="col-12 d-none" id="lmClienteEncontradoPanel"></div>
+                <div class="col-12 d-none" id="lmClienteNoEncontradoPanel">
+                    <div class="alert alert-warning mb-0">No se encontró cliente con ese documento.</div>
                 </div>
                 <div class="col-12">
                     <label class="form-label">Notas del pedido</label>
@@ -669,6 +691,18 @@
         `;
 
         initPedidoItemsEditor();
+
+        const buscarClienteBtn = byId('lmBuscarClienteBtn');
+        if (buscarClienteBtn) buscarClienteBtn.addEventListener('click', buscarClienteLibrePorDocumento);
+        const clienteDocInput = byId('lmClienteDocumentoInput');
+        if (clienteDocInput) {
+            clienteDocInput.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                buscarClienteLibrePorDocumento();
+            });
+        }
+
         const addBtn = byId('lmAddItemBtn');
         if (addBtn) addBtn.addEventListener('click', addPedidoItemRow);
         const confirmBtn = byId('lmConfirmOcuparBtn');
@@ -959,7 +993,8 @@
             return DB.getById('atenciones', atencionId);
         }
         try {
-            const response = await api.getContextoMesa(mesa.mesaReal.id, api.toIsoSeconds());
+            const fechaHoraReferencia = state.fechaHoraFiltro || getSelectedFechaHoraIso();
+            const response = await api.getContextoMesa(mesa.mesaReal.id, fechaHoraReferencia);
             mesa.contextoApi = normalizeApiContext(response?.data);
             return mesa.contextoApi?.atencionActiva || null;
         } catch {
@@ -1029,6 +1064,92 @@
         }).filter((item) => item.platoId > 0 && item.cantidad > 0);
     }
 
+    async function buscarClienteLibrePorDocumento() {
+        const input = byId('lmClienteDocumentoInput');
+        const documento = String(input ? input.value : '').trim();
+        if (!documento) {
+            alert('Ingresa un documento para buscar cliente.');
+            return;
+        }
+
+        const clienteIdInput = byId('lmClienteSelect');
+        if (clienteIdInput) clienteIdInput.value = '';
+
+        let found = null;
+
+        if (apiAvailable() && api && typeof api.buscarClientePorDocumento === 'function') {
+            try {
+                const response = await api.buscarClientePorDocumento(documento);
+                const data = response?.data;
+                if (Array.isArray(data)) {
+                    found = data.find((cliente) => String(cliente?.documento || '').trim() === documento) || null;
+                } else if (data && typeof data === 'object') {
+                    found = data;
+                }
+            } catch {
+                found = null;
+            }
+        }
+
+        if (!found) {
+            found = findClienteByDocumentoLocal(documento);
+        }
+
+        if (!found) {
+            renderClienteLibreNoEncontrado();
+            return;
+        }
+
+        renderClienteLibreSeleccionado(found);
+    }
+
+    function findClienteByDocumentoLocal(documento) {
+        const clientes = Array.isArray(state.catalogs.clientes) && state.catalogs.clientes.length
+            ? state.catalogs.clientes
+            : DB.getAll('clientes').filter((cliente) => cliente.activo).map((cliente) => ({
+                id: cliente.id,
+                nombreCompleto: `${cliente.nombres || ''} ${cliente.apellidos || ''}`.trim(),
+                documento: cliente.documento || '',
+                telefono: cliente.telefono || '',
+                email: cliente.email || ''
+            }));
+
+        return clientes.find((cliente) => String(cliente?.documento || '').trim() === documento) || null;
+    }
+
+    function renderClienteLibreSeleccionado(cliente) {
+        const clienteIdInput = byId('lmClienteSelect');
+        if (clienteIdInput) clienteIdInput.value = String(cliente?.id || '');
+
+        const panelOk = byId('lmClienteEncontradoPanel');
+        if (panelOk) {
+            const nombre = cliente?.nombreCompleto
+                || `${cliente?.nombres || ''} ${cliente?.apellidos || ''}`.trim()
+                || 'Cliente';
+            panelOk.classList.remove('d-none');
+            panelOk.innerHTML = `
+                <div class="alert alert-success mb-0">
+                    <div class="fw-semibold">Cliente seleccionado: ${escapeHtml(nombre)}</div>
+                    <div class="small">Documento: ${escapeHtml(cliente?.documento || '-')} | Teléfono: ${escapeHtml(cliente?.telefono || '-')} | Email: ${escapeHtml(cliente?.email || '-')}</div>
+                </div>
+            `;
+        }
+
+        const panelNo = byId('lmClienteNoEncontradoPanel');
+        if (panelNo) panelNo.classList.add('d-none');
+    }
+
+    function renderClienteLibreNoEncontrado() {
+        const panelOk = byId('lmClienteEncontradoPanel');
+        if (panelOk) {
+            panelOk.classList.add('d-none');
+            panelOk.innerHTML = '';
+        }
+
+        const panelNo = byId('lmClienteNoEncontradoPanel');
+        if (panelNo) panelNo.classList.remove('d-none');
+    }
+
     function buildClientesOptions(clientesSource) {
         const clientes = Array.isArray(clientesSource) && clientesSource.length
             ? clientesSource
@@ -1066,7 +1187,13 @@
         if (!state.catalogs.clientes) {
             state.catalogs.clientes = DB.getAll('clientes')
                 .filter((cliente) => cliente.activo)
-                .map((cliente) => ({ id: cliente.id, nombreCompleto: `${cliente.nombres} ${cliente.apellidos}` }));
+                .map((cliente) => ({
+                    id: cliente.id,
+                    nombreCompleto: `${cliente.nombres || ''} ${cliente.apellidos || ''}`.trim(),
+                    documento: cliente.documento || '',
+                    telefono: cliente.telefono || '',
+                    email: cliente.email || ''
+                }));
         }
         if (!state.catalogs.mozos) {
             state.catalogs.mozos = DB.getAll('usuarios')
@@ -1085,7 +1212,10 @@
             const list = Array.isArray(response?.data) ? response.data : [];
             state.catalogs.clientes = list.map((cliente) => ({
                 id: cliente.id,
-                nombreCompleto: cliente.nombreCompleto || cliente.nombre_completo || `${cliente.nombres || ''} ${cliente.apellidos || ''}`.trim() || 'Cliente'
+                nombreCompleto: cliente.nombreCompleto || cliente.nombre_completo || `${cliente.nombres || ''} ${cliente.apellidos || ''}`.trim() || 'Cliente',
+                documento: cliente.documento || '',
+                telefono: cliente.telefono || '',
+                email: cliente.email || ''
             }));
         } catch {
             state.catalogs.clientes = [];
@@ -1276,6 +1406,83 @@
         if (!isoValue) return Number.MAX_SAFE_INTEGER;
         const ts = new Date(isoValue).getTime();
         return Number.isNaN(ts) ? Number.MAX_SAFE_INTEGER : ts;
+    }
+
+    function initDateTimeFilters() {
+        const fechaInput = byId('lmFechaFiltro');
+        const horaInput = byId('lmHoraFiltro');
+        const ahoraBtn = byId('lmAhoraFiltro');
+        if (!fechaInput || !horaInput) return;
+
+        setFiltroAhora();
+
+        fechaInput.addEventListener('change', render);
+        horaInput.addEventListener('change', render);
+
+        if (ahoraBtn) {
+            ahoraBtn.addEventListener('click', () => {
+                setFiltroAhora();
+                render();
+            });
+        }
+    }
+
+    function setFiltroAhora() {
+        const fechaInput = byId('lmFechaFiltro');
+        const horaInput = byId('lmHoraFiltro');
+        const now = new Date();
+        if (fechaInput) fechaInput.value = toDateInputValue(now);
+        if (horaInput) horaInput.value = toTimeInputValue(now);
+    }
+
+    function renderFiltroActual(fechaHoraIso) {
+        const label = byId('lmFiltroActual');
+        if (!label) return;
+        label.textContent = `Disponibilidad para ${formatDateTime(fechaHoraIso)}`;
+    }
+
+    function getSelectedFechaHoraIso() {
+        const fechaInput = byId('lmFechaFiltro');
+        const horaInput = byId('lmHoraFiltro');
+        const fecha = fechaInput ? fechaInput.value : '';
+        const hora = horaInput ? horaInput.value : '';
+
+        if (fecha && hora) return `${fecha}T${hora}:00`;
+        return toIsoSecondsSafe(new Date());
+    }
+
+    function toIsoSecondsSafe(date) {
+        if (api && typeof api.toIsoSeconds === 'function') {
+            return api.toIsoSeconds(date);
+        }
+
+        const d = date instanceof Date ? date : new Date(date);
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function toDateInputValue(date) {
+        const d = date instanceof Date ? date : new Date(date);
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    function toTimeInputValue(date) {
+        const d = date instanceof Date ? date : new Date(date);
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function isReservaVigenteEnFechaHora(reserva, fechaHoraRefTs) {
+        const inicio = toTimestamp(reserva ? reserva.fecha_hora : null);
+        if (!Number.isFinite(fechaHoraRefTs) || inicio === Number.MAX_SAFE_INTEGER) return false;
+        const fin = inicio + (RESERVA_DURACION_MINUTOS * 60 * 1000);
+        return fechaHoraRefTs >= inicio && fechaHoraRefTs < fin;
+    }
+
+    function formatRecordId(value) {
+        if (value === undefined || value === null || value === '') return '-';
+        return String(value);
     }
 
     function money(value) {

@@ -46,6 +46,21 @@
         </div>
 
         <div class="content-card">
+            <div class="lm-filter-bar mb-4">
+                <div class="lm-filter-field">
+                    <label for="lmFechaFiltro" class="form-label mb-1">Fecha</label>
+                    <input type="date" class="form-control" id="lmFechaFiltro">
+                </div>
+                <div class="lm-filter-field">
+                    <label for="lmHoraFiltro" class="form-label mb-1">Hora</label>
+                    <input type="time" class="form-control" id="lmHoraFiltro" step="60">
+                </div>
+                <div class="lm-filter-actions">
+                    <button class="btn btn-outline-secondary" id="lmAhoraFiltro" type="button"><i class="bi bi-clock-history me-1"></i>Ahora</button>
+                </div>
+                <div class="lm-filter-current" id="lmFiltroActual">Disponibilidad al momento actual (hora Lima)</div>
+            </div>
+
             <div class="lm-legend-grid mb-4">
                 <article class="lm-legend-card lm-ocupada">
                     <div class="d-flex justify-content-between align-items-center">

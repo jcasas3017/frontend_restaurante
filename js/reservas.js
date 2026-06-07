@@ -23,6 +23,7 @@
 
     const API_BASE = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 'http://localhost:7070';
     const API_RESERVAS = `${API_BASE}/api/reservas`;
+    const API_LISTA_MESAS = `${API_BASE}/api/lista-mesas`;
     const API_ESTADOS = `${API_RESERVAS}/estados`;
     const API_EXPORT_EXCEL = `${API_RESERVAS}/exportar-excel`;
     const API_CLIENTES = `${API_BASE}/api/clientes`;
@@ -92,6 +93,7 @@
         byId('btnExportarReservasExcel')?.addEventListener('click', onExportarReservasExcel);
         byId('btnNuevaReserva')?.addEventListener('click', () => openForm());
         byId('btnGuardarReserva')?.addEventListener('click', onGuardarReserva);
+        byId('btnConsultarDisponibilidadMesa')?.addEventListener('click', onConsultarDisponibilidadMesas);
         byId('btnConfirmarEliminarReserva')?.addEventListener('click', onEliminarReserva);
         byId('btnBuscarClienteReserva')?.addEventListener('click', onBuscarClientePorDni);
         byId('btnMostrarAltaCliente')?.addEventListener('click', () => {
@@ -104,6 +106,24 @@
             if (e.key !== 'Enter') return;
             e.preventDefault();
             onBuscarClientePorDni();
+        });
+
+        byId('reservaFechaHora')?.addEventListener('change', resetDisponibilidadMesasUI);
+        byId('reservaIdMesa')?.addEventListener('change', () => {
+            const panel = byId('reservaDisponibilidadPanel');
+            if (panel && !panel.classList.contains('d-none')) {
+                onConsultarDisponibilidadMesas();
+            }
+        });
+
+        byId('reservaDisponibilidadPanel')?.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-mesa-disponible-id]');
+            if (!btn) return;
+            const mesaId = String(btn.dataset.mesaDisponibleId || '').trim();
+            if (!mesaId) return;
+            setValue('reservaIdMesa', mesaId);
+            showToast('Mesa seleccionada desde disponibilidad.', 'success');
+            onConsultarDisponibilidadMesas();
         });
 
         byId('btnEditarDesdeVistaReserva')?.addEventListener('click', () => {
@@ -557,6 +577,7 @@
             resolveUsuarioSesion();
             setValue('reservaObservacion', '');
             if (byId('swReservaConfirmada')) byId('swReservaConfirmada').checked = false;
+            resetDisponibilidadMesasUI();
             showModal('modalForm');
             return;
         }
@@ -577,6 +598,7 @@
         resolveUsuarioSesion();
         setValue('reservaObservacion', r.observacion || '');
         if (byId('swReservaConfirmada')) byId('swReservaConfirmada').checked = toBool(r.confirmada);
+        resetDisponibilidadMesasUI();
 
         const cliente = state.clientes.find((x) => String(x.id) === String(r.idCliente));
         if (cliente) {
@@ -617,6 +639,16 @@
             observacion,
             confirmada
         };
+
+        const disponibilidad = await validarDisponibilidadMesaParaReserva({
+            idMesa,
+            fechaHora: body.fechaHora,
+            reservaIdActual: id || null
+        });
+        if (!disponibilidad.ok) {
+            showToast(disponibilidad.message, 'danger');
+            return;
+        }
 
         const isEdit = !!id;
         const url = isEdit ? `${API_RESERVAS}/${encodeURIComponent(id)}` : API_RESERVAS;
@@ -764,6 +796,123 @@
     function normalizeDateTime(value) {
         if (!value) return value;
         return value.length === 16 ? `${value}:00` : value;
+    }
+
+    async function onConsultarDisponibilidadMesas() {
+        const fechaHoraRaw = String(byId('reservaFechaHora')?.value || '').trim();
+        if (!fechaHoraRaw) {
+            showToast('Selecciona fecha y hora para consultar disponibilidad.', 'danger');
+            return;
+        }
+
+        const fechaHora = normalizeDateTime(fechaHoraRaw);
+        const mesaSeleccionada = String(byId('reservaIdMesa')?.value || '').trim();
+
+        try {
+            const query = new URLSearchParams({
+                fechaHora,
+                page: '1',
+                size: '200'
+            });
+            const response = await fetch(`${API_LISTA_MESAS}?${query.toString()}`);
+            const payload = await safeJson(response);
+            if (!response.ok) throw new Error(payload?.message || 'No se pudo consultar disponibilidad de mesas.');
+
+            const rows = Array.isArray(payload?.data) ? payload.data : [];
+            const disponibles = rows.filter((mesa) => {
+                const estado = String(mesa?.estadoOperativo || '').toLowerCase();
+                return estado === 'libre' && mesa?.activa !== false;
+            });
+
+            renderDisponibilidadMesasPanel(disponibles, mesaSeleccionada, fechaHora);
+        } catch (error) {
+            showToast(error.message || 'No se pudo consultar disponibilidad de mesas.', 'danger');
+        }
+    }
+
+    function renderDisponibilidadMesasPanel(disponibles, mesaSeleccionada, fechaHora) {
+        const panel = byId('reservaDisponibilidadPanel');
+        if (!panel) return;
+
+        const fechaLabel = formatDateTime(fechaHora);
+        if (!disponibles.length) {
+            panel.classList.remove('d-none');
+            panel.innerHTML = `
+                <div class="reserva-disponibilidad alert alert-warning mb-0">
+                    <div class="fw-semibold"><i class="bi bi-exclamation-triangle me-1"></i>No hay mesas disponibles para ${escapeHtml(fechaLabel)}.</div>
+                </div>
+            `;
+            return;
+        }
+
+        const chips = disponibles.map((mesa) => {
+            const mesaId = String(mesa.idMesa || mesa.id || '');
+            const codigo = String(mesa.codigo || 'Mesa');
+            const capacidad = Number(mesa.capacidad || 0);
+            const active = mesaSeleccionada && mesaId === mesaSeleccionada;
+            return `<button type="button" class="btn ${active ? 'btn-primary' : 'btn-outline-success'} btn-sm" data-mesa-disponible-id="${escapeHtmlAttr(mesaId)}">${escapeHtml(codigo)}${capacidad > 0 ? ` (${capacidad} pax)` : ''}</button>`;
+        }).join('');
+
+        panel.classList.remove('d-none');
+        panel.innerHTML = `
+            <div class="reserva-disponibilidad">
+                <div class="reserva-disponibilidad-title">Mesas disponibles para ${escapeHtml(fechaLabel)}: ${disponibles.length}</div>
+                <div class="reserva-mesas-chips">${chips}</div>
+            </div>
+        `;
+    }
+
+    function resetDisponibilidadMesasUI() {
+        const panel = byId('reservaDisponibilidadPanel');
+        if (!panel) return;
+        panel.classList.add('d-none');
+        panel.innerHTML = '';
+    }
+
+    async function validarDisponibilidadMesaParaReserva({ idMesa, fechaHora, reservaIdActual }) {
+        if (!idMesa || !fechaHora) {
+            return {
+                ok: false,
+                message: 'No se pudo validar disponibilidad: faltan mesa o fecha/hora.'
+            };
+        }
+
+        try {
+            const query = new URLSearchParams({ fechaHora });
+            const response = await fetch(`${API_LISTA_MESAS}/${encodeURIComponent(idMesa)}/contexto?${query.toString()}`);
+            const payload = await safeJson(response);
+            if (!response.ok) {
+                throw new Error(payload?.message || 'No se pudo validar la disponibilidad de la mesa.');
+            }
+
+            const data = payload?.data || {};
+            const estadoOperativo = String(data.estadoOperativo || '').toLowerCase();
+            const reservaActiva = data.reservaActiva || null;
+            const idReservaActiva = String(reservaActiva?.idReserva || reservaActiva?.id || '').trim();
+            const esMismaReservaEnEdicion = !!reservaIdActual && !!idReservaActiva && String(reservaIdActual) === idReservaActiva;
+
+            if (!esMismaReservaEnEdicion && estadoBloqueaReserva(estadoOperativo)) {
+                const horaRef = reservaActiva?.fechaHora ? ` (${formatDateTime(reservaActiva.fechaHora)})` : '';
+                return {
+                    ok: false,
+                    message: `La mesa no está disponible para esa fecha y hora.${horaRef}`
+                };
+            }
+
+            return { ok: true, message: '' };
+        } catch (error) {
+            return {
+                ok: false,
+                message: error?.message || 'No se pudo validar la disponibilidad de la mesa.'
+            };
+        }
+    }
+
+    function estadoBloqueaReserva(estadoOperativo) {
+        return estadoOperativo === 'ocupada'
+            || estadoOperativo === 'reservada'
+            || estadoOperativo === 'no_disponible'
+            || estadoOperativo === 'nodisponible';
     }
 
     function toDateTimeLocal(value) {

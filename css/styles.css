@@ -377,6 +377,26 @@ a { text-decoration: none; }
 }
 .modal-body .form-label { font-size: .85rem; font-weight: 600; color: var(--ink); }
 
+.reserva-disponibilidad {
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: #f8fafc;
+    padding: 12px;
+}
+
+.reserva-disponibilidad-title {
+    font-size: .85rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 8px;
+}
+
+.reserva-mesas-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 /* Detail / View modal rows */
 .detail-row {
     display: flex; gap: 10px;
@@ -596,6 +616,34 @@ a { text-decoration: none; }
     background: linear-gradient(160deg, #f8fafc 0%, #eef2f7 100%);
 }
 
+.lm-filter-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 12px;
+    align-items: end;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.lm-filter-field .form-label {
+    font-size: .8rem;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.lm-filter-actions {
+    display: flex;
+    align-items: end;
+}
+
+.lm-filter-current {
+    grid-column: 1 / -1;
+    font-size: .84rem;
+    color: var(--muted);
+}
+
 .lm-legend-grid {
     display: grid;
     gap: 10px;
@@ -757,5 +805,6 @@ a { text-decoration: none; }
     .topbar-date { display: none; }
     .table-footer { flex-direction: column; align-items: flex-start; gap: 10px; }
     .kpi-value { font-size: 1.6rem; }
+    .lm-filter-bar { grid-template-columns: 1fr; }
 }
 
