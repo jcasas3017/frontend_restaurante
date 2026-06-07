@@ -1,0 +1,91 @@
+:root {
+    --app-primary: #0b5ed7;
+    --app-dark: #1f2a44;
+    --app-bg: #f4f6fb;
+}
+
+body {
+    background: var(--app-bg);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.app-navbar {
+    background: linear-gradient(90deg, #1f2a44 0%, #283a67 100%);
+}
+
+.hero-section {
+    background: radial-gradient(circle at 10% 20%, #dbe7ff 0%, #eff4ff 45%, #ffffff 100%);
+    border-bottom: 1px solid #d8e3ff;
+}
+
+.summary-card {
+    border: 1px solid #e6ebf5;
+    box-shadow: 0 6px 20px rgba(20, 40, 90, 0.06);
+}
+
+.summary-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+}
+
+.summary-label {
+    color: #65728a;
+    font-size: 0.85rem;
+}
+
+.app-card {
+    border: 1px solid #e6ebf5;
+    box-shadow: 0 10px 24px rgba(20, 40, 90, 0.08);
+}
+
+.table td,
+.table th {
+    vertical-align: middle;
+}
+
+.badge-priority {
+    font-size: 0.75rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+.badge-alta {
+    background: #fce8e8;
+    color: #b42318;
+}
+
+.badge-media {
+    background: #fff3db;
+    color: #b54708;
+}
+
+.badge-baja {
+    background: #e7f6ec;
+    color: #067647;
+}
+
+.table-empty {
+    color: #7a8699;
+    font-style: italic;
+}
+
+.app-footer {
+    background: #ffffff;
+    border-top: 1px solid #dfe6f4;
+    color: #4e5b73;
+    font-size: 0.9rem;
+}
+
+@media (max-width: 991.98px) {
+    .hero-section {
+        text-align: center;
+    }
+}

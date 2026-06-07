@@ -1,0 +1,240 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RestaControl | Platos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="../css/styles.css" rel="stylesheet">
+</head>
+<body class="admin-body">
+
+<div id="sidebarMount"></div>
+
+<div class="main-wrapper">
+    <header class="topbar">
+        <button class="btn btn-icon" id="sidebarToggle"><i class="bi bi-list" style="font-size:1.3rem;"></i></button>
+        <nav aria-label="breadcrumb" class="ms-2 d-none d-sm-block">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="dashboard.html">Inicio</a></li>
+                <li class="breadcrumb-item active">Platos</li>
+            </ol>
+        </nav>
+        <div class="topbar-right ms-auto d-flex align-items-center gap-3">
+            <span class="topbar-date" id="topbarDate"></span>
+            <div class="dropdown">
+                <button class="btn btn-icon" data-bs-toggle="dropdown"><i class="bi bi-person-circle" style="font-size:1.4rem;color:#7a8898;"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                    <li><div class="d-flex align-items-center gap-2 px-3 py-2">
+                        <div class="user-avatar" style="width:36px;height:36px;flex-shrink:0;"><i class="bi bi-person-fill"></i></div>
+                        <div><div class="fw-semibold small" id="headerUserName">Administrador</div><div class="text-muted" style="font-size:.75rem;" id="headerUserRole">Sistema Activo</div></div>
+                    </div></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="#" onclick="event.preventDefault();Auth.logout()"><i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión</a></li>
+                </ul>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title"><i class="bi bi-egg-fried"></i>Platos</h1>
+                <p class="page-desc">Administra la carta del restaurante: precios, disponibilidad y descripción de cada plato.</p>
+            </div>
+            <button class="btn btn-brand" id="btnNuevoPlato">
+                <i class="bi bi-plus-circle"></i>Nuevo Plato
+            </button>
+        </div>
+
+        <div class="content-card">
+            <div class="row g-3 mb-4 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">Buscar</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" class="form-control border-start-0" id="busquedaPlatos" placeholder="Nombre del plato...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">Categoría</label>
+                    <select class="form-select" id="filtroCategoriaPlatos">
+                        <option value="">Todas las categorías</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Disponible</label>
+                    <select class="form-select" id="filtroDisponiblePlatos">
+                        <option value="">Todos</option>
+                        <option value="disponible">Disponible</option>
+                        <option value="no-disponible">No disponible</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Estado</label>
+                    <select class="form-select" id="filtroEstadoPlatos">
+                        <option value="">Todos</option>
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                    </select>
+                </div>
+                <div class="col-auto ms-auto">
+                    <button class="btn btn-outline-secondary" id="btnActualizarPlatos"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th style="width:70px;">#</th>
+                            <th>Nombre</th>
+                            <th>Categoría</th>
+                            <th>Precio</th>
+                            <th>Disponible</th>
+                            <th>Estado</th>
+                            <th class="text-end" style="width:130px;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="platosTableBody">
+                        <tr><td colspan="7" class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm me-2"></div>Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-footer">
+                <span class="table-count" id="platosCount">Mostrando 0 registros</span>
+                <nav><ul class="pagination pagination-sm mb-0">
+                    <li class="page-item disabled" id="liPrevPlatos"><a class="page-link" href="#" id="btnPrevPlatos">&laquo;</a></li>
+                    <li class="page-item disabled"><a class="page-link pe-none" id="lblPaginaPlatos">-</a></li>
+                    <li class="page-item disabled" id="liNextPlatos"><a class="page-link" href="#" id="btnNextPlatos">&raquo;</a></li>
+                </ul></nav>
+            </div>
+        </div>
+    </main>
+
+    <footer class="admin-footer">
+        <span>&copy; 2026 RestaControl &mdash; Sistema de Gestión de Restaurante</span>
+        <span>Universidad Tecnológica del Perú &mdash; Marcos de Desarrollo Web</span>
+    </footer>
+</div>
+
+<!-- MODAL: CREAR / EDITAR -->
+<div class="modal fade" id="modalForm" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalPlatoTitle"><i class="bi bi-egg-fried"></i>Nuevo Plato</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formPlato" novalidate>
+                    <input type="hidden" id="platoId">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Nombre <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="nombrePlato" placeholder="Ej: Lomo saltado" required>
+                            <div class="invalid-feedback">El nombre es obligatorio.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Categoría <span class="text-danger">*</span></label>
+                            <select class="form-select" id="idCategoriaPlato" required>
+                                <option value="">Seleccionar...</option>
+                            </select>
+                            <div class="invalid-feedback">Selecciona una categoría.</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Descripción</label>
+                            <textarea class="form-control" id="descripcionPlato" rows="2" placeholder="Descripción breve del plato..."></textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Precio (S/) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text">S/</span>
+                                <input type="number" class="form-control" id="precioPlato" step="0.01" min="0" placeholder="0.00" required>
+                            </div>
+                            <div class="invalid-feedback">Ingresa un precio válido.</div>
+                        </div>
+                        <div class="col-md-4 d-flex flex-column justify-content-end">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="swDisponible" checked>
+                                <label class="form-check-label fw-semibold" for="swDisponible">Disponible en carta</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="swActivo" checked>
+                                <label class="form-check-label fw-semibold" for="swActivo">Plato activo</label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-brand" id="btnGuardarPlato"><i class="bi bi-check-circle me-1"></i>Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: VER DETALLE -->
+<div class="modal fade" id="modalView" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-egg-fried"></i>Detalle del Plato</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-row"><span class="detail-lbl">ID</span><span class="detail-val record-id" id="viewPlatoId">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Nombre</span><span class="detail-val fw-semibold" id="viewPlatoNombre">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Categoría</span><span class="detail-val" id="viewPlatoCategoria"></span></div>
+                <div class="detail-row"><span class="detail-lbl">Descripción</span><span class="detail-val text-muted" id="viewPlatoDescripcion">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Precio</span><span class="detail-val fw-bold text-success" id="viewPlatoPrecio">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Disponible</span><span class="detail-val" id="viewPlatoDisponible"></span></div>
+                <div class="detail-row"><span class="detail-lbl">Estado</span><span class="detail-val" id="viewPlatoEstado"></span></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-brand" id="btnEditarDesdeVistaPlato"><i class="bi bi-pencil me-1"></i>Editar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: ELIMINAR -->
+<div class="modal fade" id="modalDelete" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0"><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body text-center pt-2 pb-4 px-4">
+                <div class="mb-3" style="font-size:3rem;color:#ef4444;"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                <h5 class="fw-bold mb-2">¿Eliminar plato?</h5>
+                <p class="text-muted small mb-0" id="deletePlatoTexto">Esta acción lo dejará inactivo.</p>
+            </div>
+            <div class="modal-footer justify-content-center border-0 gap-2 pt-0">
+                <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger px-4" id="btnConfirmarEliminarPlato"><i class="bi bi-trash me-1"></i>Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/app.js"></script>
+<script src="../js/layout.js"></script>
+<script src="../js/platos.js"></script>
+<script>
+(async () => {
+    await Layout.loadSharedSidebar();
+    Layout.init('platos');
+})();
+</script>
+</body>
+</html>
+
+
+
+
+

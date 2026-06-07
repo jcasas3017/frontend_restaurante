@@ -1,0 +1,228 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RestaControl | Usuarios</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="../css/styles.css" rel="stylesheet">
+</head>
+<body class="admin-body">
+<div id="sidebarMount"></div>
+<div class="main-wrapper">
+    <header class="topbar">
+        <button class="btn btn-icon" id="sidebarToggle"><i class="bi bi-list" style="font-size:1.3rem;"></i></button>
+        <nav aria-label="breadcrumb" class="ms-2 d-none d-sm-block">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="dashboard.html">Inicio</a></li>
+                <li class="breadcrumb-item active">Usuarios</li>
+            </ol>
+        </nav>
+        <div class="topbar-right ms-auto d-flex align-items-center gap-3">
+            <span class="topbar-date" id="topbarDate"></span>
+            <div class="dropdown">
+                <button class="btn btn-icon" data-bs-toggle="dropdown"><i class="bi bi-person-circle" style="font-size:1.4rem;color:#7a8898;"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                    <li><div class="d-flex align-items-center gap-2 px-3 py-2">
+                        <div class="user-avatar" style="width:36px;height:36px;flex-shrink:0;"><i class="bi bi-person-fill"></i></div>
+                        <div><div class="fw-semibold small" id="headerUserName">Administrador</div><div class="text-muted" style="font-size:.75rem;" id="headerUserRole">Sistema Activo</div></div>
+                    </div></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="#" onclick="event.preventDefault();Auth.logout()"><i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión</a></li>
+                </ul>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title"><i class="bi bi-person-badge"></i>Usuarios y Roles</h1>
+                <p class="page-desc">Gestiona el personal del restaurante y sus permisos de acceso por rol.</p>
+            </div>
+            <button class="btn btn-brand" id="btnNuevoUsuario">
+                <i class="bi bi-plus-circle"></i>Nuevo Usuario
+            </button>
+        </div>
+
+        <div class="content-card">
+            <div class="row g-3 mb-4 align-items-end">
+                <div class="col-md-5">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" class="form-control border-start-0" id="busquedaUsuarios" placeholder="Nombre o apellido...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="filtroRolUsuarios">
+                        <option value="">Todos los roles</option>
+                        <option value="Administrador">Administrador</option>
+                        <option value="Recepcion">Recepcion</option>
+                        <option value="Mozo">Mozo</option>
+                        <option value="Cajero">Cajero</option>
+                        <option value="Cocinero">Cocinero</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select" id="filtroEstadoUsuarios">
+                        <option value="">Todos los estados</option>
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                    </select>
+                </div>
+                <div class="col-auto ms-auto">
+                    <button class="btn btn-outline-secondary" id="btnActualizarUsuarios"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th style="width:70px;">#</th>
+                            <th>Nombres</th>
+                            <th>Apellidos</th>
+                            <th>Rol</th>
+                            <th>Estado</th>
+                            <th class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usuariosTableBody"></tbody>
+                </table>
+            </div>
+            <div class="table-footer">
+                <span class="table-count" id="usuariosCount">Mostrando 0 registros</span>
+                <nav><ul class="pagination pagination-sm mb-0">
+                    <li class="page-item disabled" id="liPrevUsuarios"><a class="page-link" href="#" id="btnPrevUsuarios">&laquo;</a></li>
+                    <li class="page-item active"><a class="page-link" href="#" id="lblPaginaUsuarios">-</a></li>
+                    <li class="page-item disabled" id="liNextUsuarios"><a class="page-link" href="#" id="btnNextUsuarios">&raquo;</a></li>
+                </ul></nav>
+            </div>
+        </div>
+    </main>
+    <footer class="admin-footer">
+        <span>&copy; 2026 RestaControl &mdash; Sistema de Gestión de Restaurante</span>
+        <span>Universidad Tecnológica del Perú &mdash; Marcos de Desarrollo Web</span>
+    </footer>
+</div>
+
+<!-- MODAL: CREAR / EDITAR -->
+<div class="modal fade" id="modalForm" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalUsuarioTitle"><i class="bi bi-person-badge"></i>Nuevo Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formUsuario" novalidate>
+                    <input type="hidden" id="usuarioId">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Nombres <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="nombresUsuario" placeholder="Ej: Javier" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Apellidos <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="apellidosUsuario" placeholder="Ej: Casas" required>
+                        </div>
+                        <div class="col-md-7">
+                            <label class="form-label">Username <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="usernameUsuario" placeholder="Ej: jcasas" required>
+                        </div>
+                        <div class="col-md-5" id="passwordBlock">
+                            <label class="form-label">Contraseña inicial <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="passwordUsuario" placeholder="Min. 6 caracteres">
+                        </div>
+                        <div class="col-md-7">
+                            <label class="form-label">Rol <span class="text-danger">*</span></label>
+                            <select class="form-select" id="rolUsuario" required>
+                                <option value="">Seleccionar rol...</option>
+                                <option value="Administrador">Administrador</option>
+                                <option value="Recepcion">Recepcion</option>
+                                <option value="Mozo">Mozo</option>
+                                <option value="Cajero">Cajero</option>
+                                <option value="Cocinero">Cocinero</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5 d-flex align-items-end pb-1">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="swUsuarioActivo" checked>
+                                <label class="form-check-label fw-semibold" for="swUsuarioActivo">Usuario activo</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <hr class="my-1">
+                            <p class="text-muted small mb-2"><i class="bi bi-info-circle me-1"></i>Al editar no se modifica contraseña desde este modal.</p>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-brand" id="btnGuardarUsuario"><i class="bi bi-check-circle me-1"></i>Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: VER -->
+<div class="modal fade" id="modalView" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-person-badge"></i>Detalle del Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-row"><span class="detail-lbl">ID</span><span class="detail-val record-id" id="viewUsuarioId">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Nombres</span><span class="detail-val fw-semibold" id="viewUsuarioNombres">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Apellidos</span><span class="detail-val fw-semibold" id="viewUsuarioApellidos">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Rol</span><span class="detail-val" id="viewUsuarioRol">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Estado</span><span class="detail-val" id="viewUsuarioEstado">-</span></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-brand" id="btnEditarDesdeVista"><i class="bi bi-pencil me-1"></i>Editar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: ELIMINAR -->
+<div class="modal fade" id="modalDelete" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0"><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body text-center pt-2 pb-4 px-4">
+                <div class="mb-3" style="font-size:3rem;color:#ef4444;"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                <h5 class="fw-bold mb-2">¿Eliminar usuario?</h5>
+                <p class="text-muted small mb-0" id="deleteUsuarioTexto">Se eliminará el usuario seleccionado.</p>
+            </div>
+            <div class="modal-footer justify-content-center border-0 gap-2 pt-0">
+                <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger px-4" id="btnConfirmarEliminarUsuario"><i class="bi bi-trash me-1"></i>Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/app.js"></script>
+<script src="../js/layout.js"></script>
+<script src="../js/usuarios.js"></script>
+<script>
+(async () => {
+    await Layout.loadSharedSidebar();
+    Layout.init('usuarios');
+})();
+</script>
+</body>
+</html>
+
+
+
+
+

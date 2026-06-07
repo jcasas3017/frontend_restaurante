@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RestaControl | Productos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="../css/styles.css" rel="stylesheet">
+</head>
+<body class="admin-body">
+
+<div id="sidebarMount"></div>
+
+<div class="main-wrapper">
+    <header class="topbar">
+        <button class="btn btn-icon" id="sidebarToggle"><i class="bi bi-list" style="font-size:1.3rem;"></i></button>
+        <nav aria-label="breadcrumb" class="ms-2 d-none d-sm-block">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="dashboard.html">Inicio</a></li>
+                <li class="breadcrumb-item active">Productos</li>
+            </ol>
+        </nav>
+        <div class="topbar-right ms-auto d-flex align-items-center gap-3">
+            <span class="topbar-date" id="topbarDate"></span>
+            <div class="dropdown">
+                <button class="btn btn-icon" data-bs-toggle="dropdown"><i class="bi bi-person-circle" style="font-size:1.4rem;color:#7a8898;"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                    <li><div class="d-flex align-items-center gap-2 px-3 py-2">
+                        <div class="user-avatar" style="width:36px;height:36px;flex-shrink:0;"><i class="bi bi-person-fill"></i></div>
+                        <div><div class="fw-semibold small" id="headerUserName">Administrador</div><div class="text-muted" style="font-size:.75rem;" id="headerUserRole">Sistema Activo</div></div>
+                    </div></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="#" onclick="event.preventDefault();Auth.logout()"><i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión</a></li>
+                </ul>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title"><i class="bi bi-bag"></i>Productos</h1>
+                <p class="page-desc">Gestiona gaseosas, cervezas y otros productos que no requieren preparación en cocina. El stock se descuenta al entregarse.</p>
+            </div>
+            <button class="btn btn-brand" id="btnNuevoProducto" data-bs-toggle="modal" data-bs-target="#modalProducto">
+                <i class="bi bi-plus-circle"></i>Nuevo Producto
+            </button>
+        </div>
+
+        <!-- KPIs de stock -->
+        <div class="kitchen-summary mb-4">
+            <article class="kpi-card kpi-total">
+                <p class="kpi-label">Total productos</p>
+                <p class="kpi-value" id="kpiTotalProductos">0</p>
+            </article>
+            <article class="kpi-card kpi-ready">
+                <p class="kpi-label">Disponibles</p>
+                <p class="kpi-value" id="kpiDisponibles">0</p>
+            </article>
+            <article class="kpi-card kpi-pending">
+                <p class="kpi-label">Stock bajo (&le;5)</p>
+                <p class="kpi-value" id="kpiStockBajo">0</p>
+            </article>
+            <article class="kpi-card kpi-canceled">
+                <p class="kpi-label">Sin stock</p>
+                <p class="kpi-value" id="kpiSinStock">0</p>
+            </article>
+        </div>
+
+        <div class="content-card">
+            <div class="row g-3 mb-4 align-items-end">
+                <div class="col-md-5">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" id="busquedaProductos" class="form-control border-start-0" placeholder="Buscar producto...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="filtroEstadoProducto">
+                        <option value="">Todos</option>
+                        <option value="activo">Activos</option>
+                        <option value="inactivo">Inactivos</option>
+                        <option value="sinstock">Sin stock</option>
+                    </select>
+                </div>
+                <div class="col-auto ms-auto">
+                    <button class="btn btn-outline-secondary" id="btnActualizarProductos"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th style="width:60px;">#</th>
+                            <th>Nombre</th>
+                            <th>Descripción</th>
+                            <th>Precio</th>
+                            <th class="text-center">Stock</th>
+                            <th>Unidad</th>
+                            <th>Estado</th>
+                            <th class="text-end" style="width:130px;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productosTableBody"></tbody>
+                </table>
+            </div>
+            <div class="table-footer">
+                <span class="table-count" id="productosCount">Mostrando 0 productos</span>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item disabled" id="liPrevProductos"><a class="page-link" href="#" id="btnPrevProductos">&laquo;</a></li>
+                        <li class="page-item disabled"><a class="page-link pe-none" id="lblPaginaProductos">-</a></li>
+                        <li class="page-item disabled" id="liNextProductos"><a class="page-link" href="#" id="btnNextProductos">&raquo;</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </main>
+
+    <footer class="admin-footer">
+        <span>&copy; 2026 RestaControl &mdash; Sistema de Gestión de Restaurante</span>
+        <span>Universidad Tecnológica del Perú &mdash; Marcos de Desarrollo Web</span>
+    </footer>
+</div>
+
+<!-- Modal Producto -->
+<div class="modal fade" id="modalProducto" tabindex="-1" aria-labelledby="modalProductoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalProductoLabel"><i class="bi bi-bag me-2"></i>Producto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formProducto" novalidate>
+                    <input type="hidden" id="productoId">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Nombre del producto <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="productoNombre" placeholder="Ej: Inca Kola 500ml" required maxlength="100">
+                            <div class="invalid-feedback">El nombre es requerido.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Unidad</label>
+                            <select class="form-select" id="productoUnidad">
+                                <option value="unidad">Unidad</option>
+                                <option value="botella">Botella</option>
+                                <option value="lata">Lata</option>
+                                <option value="vaso">Vaso</option>
+                                <option value="porcion">Porción</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Descripción</label>
+                            <textarea class="form-control" id="productoDescripcion" rows="2" placeholder="Descripción breve del producto" maxlength="200"></textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Precio (S/) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="productoPrecio" min="0" step="0.10" placeholder="0.00" required>
+                            <div class="invalid-feedback">Ingresa un precio válido.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Stock actual <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="productoStock" min="0" step="1" placeholder="0" required>
+                            <div class="invalid-feedback">Ingresa la cantidad en stock.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Stock minimo</label>
+                            <input type="number" class="form-control" id="productoStockMinimo" min="0" step="1" placeholder="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Estado</label>
+                            <select class="form-select" id="productoActivo">
+                                <option value="true">Activo</option>
+                                <option value="false">Inactivo</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-brand" id="btnGuardarProducto"><i class="bi bi-save me-1"></i>Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal ajuste de stock -->
+<div class="modal fade" id="modalStock" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title" id="modalStockTitle"><i class="bi bi-boxes me-2"></i>Ajustar stock</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="stockProductoId">
+                <div class="mb-3">
+                    <label class="form-label">Nuevo stock</label>
+                    <input type="number" class="form-control" id="nuevoStock" min="0" step="1">
+                </div>
+                <div>
+                    <label class="form-label">Motivo</label>
+                    <select class="form-select" id="stockMotivo">
+                        <option value="reposicion">Reposición</option>
+                        <option value="ajuste">Ajuste manual</option>
+                        <option value="devolucion">Devolución</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-brand" id="btnConfirmarStock">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/app.js"></script>
+<script src="../js/layout.js"></script>
+<script src="../js/productos.js"></script>
+<script>
+(async () => {
+    await Layout.loadSharedSidebar();
+    Layout.init('productos');
+})();
+</script>
+</body>
+</html>

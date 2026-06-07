@@ -1,0 +1,298 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RestaControl | Reservas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="../css/styles.css" rel="stylesheet">
+</head>
+<body class="admin-body">
+<div id="sidebarMount"></div>
+<div class="main-wrapper">
+    <header class="topbar">
+        <button class="btn btn-icon" id="sidebarToggle"><i class="bi bi-list" style="font-size:1.3rem;"></i></button>
+        <nav aria-label="breadcrumb" class="ms-2 d-none d-sm-block">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="dashboard.html">Inicio</a></li>
+                <li class="breadcrumb-item active">Reservas</li>
+            </ol>
+        </nav>
+        <div class="topbar-right ms-auto d-flex align-items-center gap-3">
+            <span class="topbar-date" id="topbarDate"></span>
+            <div class="dropdown">
+                <button class="btn btn-icon" data-bs-toggle="dropdown"><i class="bi bi-person-circle" style="font-size:1.4rem;color:#7a8898;"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                    <li><div class="d-flex align-items-center gap-2 px-3 py-2">
+                        <div class="user-avatar" style="width:36px;height:36px;flex-shrink:0;"><i class="bi bi-person-fill"></i></div>
+                        <div><div class="fw-semibold small" id="headerUserName">Administrador</div><div class="text-muted" style="font-size:.75rem;" id="headerUserRole">Sistema Activo</div></div>
+                    </div></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="#" onclick="event.preventDefault();Auth.logout()"><i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión</a></li>
+                </ul>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title"><i class="bi bi-calendar-check"></i>Reservas</h1>
+                <p class="page-desc">Gestiona las solicitudes y confirmaciones de reservas de clientes.</p>
+            </div>
+            <button class="btn btn-brand" id="btnNuevaReserva">
+                <i class="bi bi-plus-circle"></i>Nueva Reserva
+            </button>
+        </div>
+
+        <div class="content-card">
+            <div class="row g-3 mb-4 align-items-end">
+                <div class="col-md-3">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" class="form-control border-start-0" id="busquedaReservas" placeholder="Cliente, mesa o código...">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Cliente</label>
+                    <select class="form-select" id="filtroClienteReservas">
+                        <option value="">Todos los clientes</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Mesa</label>
+                    <select class="form-select" id="filtroMesaReservas">
+                        <option value="">Todas las mesas</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Estado</label>
+                    <select class="form-select" id="filtroEstadoReservas">
+                        <option value="">Todos los estados</option>
+                    </select>
+                </div>
+                <div class="col-auto ms-auto">
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-success" id="btnExportarReservasExcel"><i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel</button>
+                        <button class="btn btn-outline-secondary" id="btnActualizarReservas"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>#</th><th>Tipo</th><th>Cliente</th><th>Mesa</th>
+                            <th>Fecha / Hora</th><th>Personas</th><th>Estado</th><th>Confirmada</th>
+                            <th class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reservasTableBody">
+                        <tr><td colspan="9" class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm me-2"></div>Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="table-footer">
+                <span class="table-count" id="reservasCount">Mostrando 0 registros</span>
+                <nav><ul class="pagination pagination-sm mb-0">
+                    <li class="page-item disabled" id="liPrevReservas"><a class="page-link" href="#" id="btnPrevReservas">&laquo;</a></li>
+                    <li class="page-item disabled"><a class="page-link pe-none" id="lblPaginaReservas">-</a></li>
+                    <li class="page-item disabled" id="liNextReservas"><a class="page-link" href="#" id="btnNextReservas">&raquo;</a></li>
+                </ul></nav>
+            </div>
+        </div>
+    </main>
+    <footer class="admin-footer">
+        <span>&copy; 2026 RestaControl &mdash; Sistema de Gestión de Restaurante</span>
+        <span>Universidad Tecnológica del Perú &mdash; Marcos de Desarrollo Web</span>
+    </footer>
+</div>
+
+<!-- MODAL: CREAR / EDITAR -->
+<div class="modal fade" id="modalForm" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalReservaTitle"><i class="bi bi-calendar-check"></i>Nueva Reserva</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formReserva" novalidate>
+                    <input type="hidden" id="reservaId">
+                    <input type="hidden" id="reservaIdCliente">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Tipo <span class="text-danger">*</span></label>
+                            <select class="form-select" id="reservaTipo" required>
+                                <option value="Salon">Salón</option>
+                                <option value="Terraza">Terraza</option>
+                                <option value="Evento">Evento</option>
+                                <option value="Delivery Pick-Up">Delivery Pick-Up</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Buscar cliente por DNI <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="clienteDniBusqueda" placeholder="Ej: 71234567" maxlength="20">
+                                <button class="btn btn-outline-secondary" type="button" id="btnBuscarClienteReserva"><i class="bi bi-search"></i></button>
+                            </div>
+                            <div class="form-text">Busca cliente sin salir del modal. Si no existe, regístralo aquí mismo.</div>
+                        </div>
+                        <div class="col-12 d-none" id="clienteEncontradoPanel"></div>
+                        <div class="col-12 d-none" id="clienteNoEncontradoPanel">
+                            <div class="alert alert-warning d-flex align-items-center justify-content-between mb-0">
+                                <span>No se encontró cliente con ese documento.</span>
+                                <button type="button" class="btn btn-sm btn-warning" id="btnMostrarAltaCliente">Registrar cliente</button>
+                            </div>
+                        </div>
+                        <div class="col-12 d-none" id="altaClienteInlineWrap">
+                            <div class="border rounded p-3 bg-light">
+                                <div class="fw-semibold mb-2">Alta rápida de cliente</div>
+                                <div class="row g-2">
+                                    <div class="col-md-3">
+                                        <label class="form-label small mb-1">Documento</label>
+                                        <input type="text" class="form-control" id="quickClienteDocumento" maxlength="20">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small mb-1">Nombres</label>
+                                        <input type="text" class="form-control" id="quickClienteNombres">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small mb-1">Apellidos</label>
+                                        <input type="text" class="form-control" id="quickClienteApellidos">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small mb-1">Teléfono</label>
+                                        <input type="text" class="form-control" id="quickClienteTelefono">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label small mb-1">Email</label>
+                                        <input type="email" class="form-control" id="quickClienteEmail">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small mb-1">Tipo documento</label>
+                                        <select class="form-select" id="quickClienteTipoDocumento">
+                                            <option value="DNI">DNI</option>
+                                            <option value="RUC">RUC</option>
+                                            <option value="PASAPORTE">PASAPORTE</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4 d-flex align-items-end gap-2">
+                                        <button type="button" class="btn btn-brand w-100" id="btnCrearClienteInline"><i class="bi bi-person-plus me-1"></i>Crear cliente</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Nombre de contacto <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="reservaNombreContacto" placeholder="Ej: Lucia Fernandez" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Mesa <span class="text-danger">*</span></label>
+                            <select class="form-select" id="reservaIdMesa" required>
+                                <option value="">Seleccionar mesa...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Fecha y hora <span class="text-danger">*</span></label>
+                            <input type="datetime-local" class="form-control" id="reservaFechaHora" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Personas <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="reservaCantidadPersonas" min="1" value="2" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Estado <span class="text-danger">*</span></label>
+                            <select class="form-select" id="reservaEstado" required></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Creada por</label>
+                            <input type="text" class="form-control" id="reservaCreadaPor" readonly>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Observación</label>
+                            <textarea class="form-control" id="reservaObservacion" rows="2" placeholder="Zona preferida, alergias, etc."></textarea>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="swReservaConfirmada">
+                                <label class="form-check-label fw-semibold" for="swReservaConfirmada">Reserva confirmada</label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-brand" id="btnGuardarReserva"><i class="bi bi-check-circle me-1"></i>Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: VER -->
+<div class="modal fade" id="modalView" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-calendar-check"></i>Detalle de Reserva</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-row"><span class="detail-lbl">ID</span><span class="detail-val record-id" id="viewReservaId">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Tipo</span><span class="detail-val" id="viewReservaTipo"></span></div>
+                <div class="detail-row"><span class="detail-lbl">Cliente</span><span class="detail-val fw-semibold" id="viewReservaCliente">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Contacto</span><span class="detail-val" id="viewReservaContacto">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Mesa</span><span class="detail-val" id="viewReservaMesa">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Fecha / Hora</span><span class="detail-val" id="viewReservaFechaHora">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Personas</span><span class="detail-val" id="viewReservaPersonas">-</span></div>
+                <div class="detail-row"><span class="detail-lbl">Estado</span><span class="detail-val" id="viewReservaEstado"></span></div>
+                <div class="detail-row"><span class="detail-lbl">Confirmada</span><span class="detail-val" id="viewReservaConfirmada"></span></div>
+                <div class="detail-row"><span class="detail-lbl">Observación</span><span class="detail-val text-muted" id="viewReservaObservacion">-</span></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-brand" id="btnEditarDesdeVistaReserva"><i class="bi bi-pencil me-1"></i>Editar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: ELIMINAR -->
+<div class="modal fade" id="modalDelete" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0"><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body text-center pt-2 pb-4 px-4">
+                <div class="mb-3" style="font-size:3rem;color:#ef4444;"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                <h5 class="fw-bold mb-2">¿Eliminar reserva?</h5>
+                <p class="text-muted small mb-0" id="deleteReservaTexto">Esta acción no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer justify-content-center border-0 gap-2 pt-0">
+                <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger px-4" id="btnConfirmarEliminarReserva"><i class="bi bi-trash me-1"></i>Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/app.js"></script>
+<script src="../js/layout.js"></script>
+<script src="../js/reservas.js"></script>
+<script>
+(async () => {
+    await Layout.loadSharedSidebar();
+    Layout.init('reservas');
+})();
+</script>
+</body>
+</html>
+
+
+
+
+

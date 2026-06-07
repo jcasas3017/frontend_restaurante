@@ -1,0 +1,125 @@
+﻿/* =====================================================
+   RestaControl — Layout Module
+   Handles: sidebar toggle, active link, user info, date
+   ===================================================== */
+
+const Layout = (() => {
+
+    const SIDEBAR_FALLBACK_HTML = `
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+        <i class="bi bi-cup-hot-fill brand-icon"></i>
+        <div>
+            <div class="brand-name">RestaControl</div>
+            <div class="brand-sub">Panel Administrativo</div>
+        </div>
+    </div>
+    <ul class="sidebar-nav">
+        <li><a class="nav-link" href="dashboard.html" data-page="dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></a></li>
+        <li class="nav-section">Carta</li>
+        <li><a class="nav-link" href="categorias.html" data-page="categorias"><i class="bi bi-tags"></i><span>Categorías</span></a></li>
+        <li><a class="nav-link" href="platos.html" data-page="platos"><i class="bi bi-egg-fried"></i><span>Platos</span></a></li>
+        <li><a class="nav-link" href="productos.html" data-page="productos"><i class="bi bi-bag"></i><span>Productos</span></a></li>
+        <li class="nav-section">Clientes y Personal</li>
+        <li><a class="nav-link" href="clientes.html" data-page="clientes"><i class="bi bi-people"></i><span>Clientes</span></a></li>
+        <li><a class="nav-link" href="usuarios.html" data-page="usuarios"><i class="bi bi-person-badge"></i><span>Usuarios</span></a></li>
+        <li class="nav-section">Salón</li>
+        <li><a class="nav-link" href="mesas.html" data-page="mesas"><i class="bi bi-grid-3x3-gap"></i><span>Mesas</span></a></li>
+        <li><a class="nav-link" href="lista-mesas.html" data-page="listaMesas"><i class="bi bi-grid"></i><span>Lista-Mesas</span></a></li>
+        <li><a class="nav-link" href="reservas.html" data-page="reservas"><i class="bi bi-calendar-check"></i><span>Reservas</span></a></li>
+        <li class="nav-section">Servicio</li>
+        <li><a class="nav-link" href="atenciones.html" data-page="atenciones"><i class="bi bi-bell"></i><span>Atenciones</span></a></li>
+        <li><a class="nav-link" href="pedidos.html" data-page="pedidos"><i class="bi bi-receipt"></i><span>Pedidos</span></a></li>
+        <li><a class="nav-link" href="pedidos-mesa.html" data-page="pedidosMesa"><i class="bi bi-grid"></i><span>Pedidos por Mesa</span></a></li>
+        <li><a class="nav-link" href="cocina.html" data-page="cocina"><i class="bi bi-fire"></i><span>Cocina</span></a></li>
+        <li><a class="nav-link" href="detalle-pedidos.html" data-page="detallePedidos"><i class="bi bi-list-check"></i><span>Detalle Pedidos</span></a></li>
+    </ul>
+    <div class="sidebar-footer">
+        <div class="sidebar-user">
+            <div class="user-avatar"><i class="bi bi-person-fill"></i></div>
+            <div class="user-info">
+                <div class="user-name" id="sidebarUserName">Administrador</div>
+                <div class="user-role" id="sidebarUserRole">Admin</div>
+            </div>
+            <button class="btn btn-icon" onclick="Auth.logout()" title="Cerrar sesión">
+                <i class="bi bi-box-arrow-right" style="color:#b8c2d4;"></i>
+            </button>
+        </div>
+    </div>
+</aside>
+`;
+
+    async function loadSharedSidebar(mountId = 'sidebarMount', partialPath = './partials/sidebar.html') {
+        const mount = document.getElementById(mountId);
+        if (!mount) return;
+
+        try {
+            const response = await fetch(partialPath);
+            if (!response.ok) throw new Error(`No se pudo cargar el sidebar (${response.status})`);
+            mount.innerHTML = await response.text();
+        } catch (error) {
+            console.error('Error cargando sidebar compartido:', error);
+            mount.innerHTML = SIDEBAR_FALLBACK_HTML;
+        }
+    }
+
+    function init(pageKey) {
+        Auth.requireLogin();
+        _setUser();
+        _setActiveLink(pageKey);
+        _bindSidebarToggle();
+        _setDate();
+    }
+
+    function _setUser() {
+        const s = Auth.getSession();
+        if (!s) return;
+        _setText('sidebarUserName', s.name);
+        _setText('sidebarUserRole', s.role);
+        _setText('headerUserName',  s.name);
+        _setText('headerUserRole',  s.role);
+    }
+
+    function _setActiveLink(pageKey) {
+        document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+            link.classList.toggle('active', link.dataset.page === pageKey);
+        });
+    }
+
+    function _bindSidebarToggle() {
+        const toggle  = document.getElementById('sidebarToggle');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        if (!toggle || !sidebar) return;
+
+        toggle.addEventListener('click', () => {
+            sidebar.classList.toggle('sidebar-open');
+            if (overlay) overlay.classList.toggle('active');
+        });
+
+        if (overlay) {
+            overlay.addEventListener('click', () => {
+                sidebar.classList.remove('sidebar-open');
+                overlay.classList.remove('active');
+            });
+        }
+    }
+
+    function _setDate() {
+        const el = document.getElementById('topbarDate');
+        if (el) {
+            el.textContent = new Date().toLocaleDateString('es-PE', {
+                weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+            });
+        }
+    }
+
+    function _setText(id, text) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+    }
+
+    return { init, loadSharedSidebar };
+})();
+
