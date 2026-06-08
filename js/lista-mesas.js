@@ -307,6 +307,10 @@
 
         if (mesa.estado === 'nodisponible') return;
         if (mesa.estado === 'ocupada') {
+            if (apiAvailable()) {
+                await ensureClientesCatalog();
+                await ensureMozosCatalog();
+            }
             openModalOcupada(mesa);
             return;
         }
@@ -421,6 +425,7 @@
         `;
 
         const pagoActivo = String(detalle.estadoPago).toLowerCase() === 'pagado';
+        const sinPedidoInicial = !Array.isArray(detalle.items) || !detalle.items.length;
         modalFooter.innerHTML = `
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
             <button type="button" class="btn btn-brand" id="lmCobrarBtn" ${pagoActivo ? 'disabled' : ''}><i class="bi bi-cash-coin me-1"></i>${pagoActivo ? 'Mesa pagada' : 'Cobrar mesa'}</button>
@@ -471,7 +476,53 @@
             modalFooter.insertBefore(addPlatoBtn, cobrarBtn);
         }
 
+        if (modalFooter && !pagoActivo && sinPedidoInicial) {
+            const anularBtn = document.createElement('button');
+            anularBtn.type = 'button';
+            anularBtn.className = 'btn btn-outline-danger';
+            anularBtn.id = 'lmAnularAtencionBtn';
+            anularBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Anular';
+            anularBtn.addEventListener('click', () => anularAtencionSinPedido(mesa, atencion, detalle));
+            modalFooter.insertBefore(anularBtn, modalFooter.firstChild);
+        }
+
         showModal();
+    }
+
+    async function anularAtencionSinPedido(mesa, atencion, detalle) {
+        if (!atencion || !atencion.id) {
+            alert('No se encontró una atención activa para anular.');
+            return;
+        }
+
+        if (Array.isArray(detalle?.items) && detalle.items.length) {
+            alert('No se puede anular porque la atención ya tiene pedidos registrados.');
+            return;
+        }
+
+        if (!confirm('¿Deseas anular la atención? La mesa volverá a estado libre.')) return;
+
+        if (apiAvailable()) {
+            try {
+                await api.anularAtencion(atencion.id, { motivo: 'Sin pedido inicial' });
+                hideModal();
+                await render();
+                alert('Atención anulada. Mesa liberada.');
+                return;
+            } catch (error) {
+                alert(extractApiMessage(error, 'No se pudo anular la atención.'));
+                return;
+            }
+        }
+
+        DB.update('atenciones', atencion.id, {
+            estado: 'Cancelada',
+            cierre_en: new Date().toISOString().slice(0, 16)
+        });
+
+        hideModal();
+        await render();
+        alert('Atención anulada. Mesa liberada.');
     }
 
     function openPagoResumen(mesa, atencion, detalle) {
@@ -669,7 +720,48 @@
                 </div>
                 <div class="col-12 d-none" id="lmClienteEncontradoPanel"></div>
                 <div class="col-12 d-none" id="lmClienteNoEncontradoPanel">
-                    <div class="alert alert-warning mb-0">No se encontró cliente con ese documento.</div>
+                    <div class="alert alert-warning d-flex align-items-center justify-content-between mb-0">
+                        <span>No se encontró cliente con ese documento.</span>
+                        <button type="button" class="btn btn-sm btn-warning" id="lmMostrarAltaClienteBtn">Registrar cliente</button>
+                    </div>
+                </div>
+                <div class="col-12 d-none" id="lmAltaClienteInlineWrap">
+                    <div class="border rounded p-3 bg-light">
+                        <div class="fw-semibold mb-2">Alta rápida de cliente</div>
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Documento</label>
+                                <input type="text" class="form-control" id="lmQuickClienteDocumento" maxlength="20">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Nombres</label>
+                                <input type="text" class="form-control" id="lmQuickClienteNombres">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Apellidos</label>
+                                <input type="text" class="form-control" id="lmQuickClienteApellidos">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Teléfono</label>
+                                <input type="text" class="form-control" id="lmQuickClienteTelefono">
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label small mb-1">Email</label>
+                                <input type="email" class="form-control" id="lmQuickClienteEmail">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Tipo documento</label>
+                                <select class="form-select" id="lmQuickClienteTipoDocumento">
+                                    <option value="DNI">DNI</option>
+                                    <option value="RUC">RUC</option>
+                                    <option value="PASAPORTE">PASAPORTE</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end gap-2">
+                                <button type="button" class="btn btn-brand w-100" id="lmCrearClienteInlineBtn"><i class="bi bi-person-plus me-1"></i>Crear cliente</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="col-12">
                     <label class="form-label">Notas del pedido</label>
@@ -681,19 +773,32 @@
                         <button class="btn btn-sm btn-outline-secondary" type="button" id="lmAddItemBtn"><i class="bi bi-plus"></i>Agregar plato</button>
                     </div>
                     <div id="lmItemsContainer"></div>
+                    <div class="form-text mt-2">Puedes dejarlo vacío y solo ocupar la mesa; el pedido se puede agregar después.</div>
                 </div>
             </div>
         `;
 
         modalFooter.innerHTML = `
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-            <button type="button" class="btn btn-brand" id="lmConfirmOcuparBtn"><i class="bi bi-check-circle me-1"></i>Ocupar y guardar pedido</button>
+            <button type="button" class="btn btn-brand" id="lmConfirmOcuparBtn"><i class="bi bi-check-circle me-1"></i>Ocupar mesa</button>
         `;
 
         initPedidoItemsEditor();
 
         const buscarClienteBtn = byId('lmBuscarClienteBtn');
         if (buscarClienteBtn) buscarClienteBtn.addEventListener('click', buscarClienteLibrePorDocumento);
+
+        const mostrarAltaBtn = byId('lmMostrarAltaClienteBtn');
+        if (mostrarAltaBtn) {
+            mostrarAltaBtn.addEventListener('click', () => {
+                const documentoActual = String(byId('lmClienteDocumentoInput')?.value || '').trim();
+                mostrarAltaClienteLibre(documentoActual);
+            });
+        }
+
+        const crearClienteBtn = byId('lmCrearClienteInlineBtn');
+        if (crearClienteBtn) crearClienteBtn.addEventListener('click', crearClienteLibreInline);
+
         const clienteDocInput = byId('lmClienteDocumentoInput');
         if (clienteDocInput) {
             clienteDocInput.addEventListener('keydown', (event) => {
@@ -799,11 +904,12 @@
             return;
         }
 
-        const pedidoItems = collectPedidoItems();
-        if (!pedidoItems.length) {
-            alert('Agrega al menos un plato al pedido.');
+        if (apiAvailable() && (!isUuid(clienteId) || !isUuid(mozoId))) {
+            alert('El cliente o mozo seleccionado no tiene formato UUID válido. Vuelve a buscar y selecciona datos del backend.');
             return;
         }
+
+        const pedidoItems = collectPedidoItems();
 
         if (apiAvailable() && mesa && mesa.mesaReal && mesa.mesaReal.id) {
             try {
@@ -811,12 +917,14 @@
                     idCliente: clienteId,
                     idMozo: mozoId,
                     notas: notasInput ? notasInput.value.trim() : '',
-                    items: pedidoItems.map((item) => ({
-                        tipoItem: 'plato',
-                        idItem: item.platoId,
-                        cantidad: item.cantidad,
-                        observaciones: ''
-                    }))
+                    items: pedidoItems.length
+                        ? pedidoItems.map((item) => ({
+                            tipoItem: 'plato',
+                            idItem: item.platoId,
+                            cantidad: item.cantidad,
+                            observaciones: ''
+                        }))
+                        : []
                 };
 
                 if (reserva && reserva.id) {
@@ -856,16 +964,18 @@
             notas: notasInput ? notasInput.value.trim() : ''
         });
 
-        pedidoItems.forEach((item) => {
-            DB.insert('detallePedidos', {
-                id_pedido: Number(pedido.id),
-                id_plato: Number(item.platoId),
-                cantidad: Number(item.cantidad),
-                precio_unit: Number(item.precio),
-                descuento: 0,
-                estado_cocina: 'pendiente'
+        if (pedidoItems.length) {
+            pedidoItems.forEach((item) => {
+                DB.insert('detallePedidos', {
+                    id_pedido: Number(pedido.id),
+                    id_plato: Number(item.platoId),
+                    cantidad: Number(item.cantidad),
+                    precio_unit: Number(item.precio),
+                    descuento: 0,
+                    estado_cocina: 'pendiente'
+                });
             });
-        });
+        }
 
         if (reserva) {
             DB.update('reservas', reserva.id, {
@@ -880,13 +990,18 @@
     }
 
     function buildAtencionDetalle(atencion, mesa = null) {
-        if (apiAvailable() && mesa && mesa.contextoApi && mesa.contextoApi.pedidoActual) {
+        if (apiAvailable() && mesa && mesa.contextoApi) {
             const ctx = mesa.contextoApi;
-            const clienteNombreApi = atencion.clienteNombre || ctx.reservaActiva?.nombre_contacto || 'Cliente';
-            const mozoNombreApi = atencion.mozoNombre || 'Mozo asignado';
-            const itemsApi = (ctx.pedidoActual.items || []).map((item) => ({
+            const pedidoActual = ctx.pedidoActual || null;
+            const clienteApi = (state.catalogs.clientes || []).find((cliente) => String(cliente.id) === String(atencion.id_cliente || ctx.reservaActiva?.id_cliente || '')) || null;
+            const clienteNombreApi = atencion.clienteNombre || clienteApi?.nombreCompleto || ctx.reservaActiva?.nombre_contacto || 'Cliente';
+            const clienteDocumentoApi = clienteApi?.documento || '-';
+            const clienteTelefonoApi = clienteApi?.telefono || '-';
+            const mozoApi = (state.catalogs.mozos || []).find((usuario) => String(usuario.id) === String(atencion.id_mozo || '')) || null;
+            const mozoNombreApi = atencion.mozoNombre || mozoApi?.nombreCompleto || 'Sin mozo';
+            const itemsApi = ((pedidoActual && Array.isArray(pedidoActual.items)) ? pedidoActual.items : []).map((item) => ({
                 detalleId: item.idDetalle,
-                pedidoId: item.idPedido || ctx.pedidoActual.idPedido || '-',
+                pedidoId: item.idPedido || pedidoActual?.idPedido || '-',
                 platoNombre: item.nombreItem,
                 cantidad: Number(item.cantidad || 0),
                 estadoPlato: normalizeEstadoPlato(item.estadoCocina),
@@ -895,13 +1010,13 @@
 
             return {
                 clienteNombre: clienteNombreApi,
-                clienteDocumento: '-',
-                clienteTelefono: '-',
+                clienteDocumento: clienteDocumentoApi,
+                clienteTelefono: clienteTelefonoApi,
                 mozoNombre: mozoNombreApi,
                 apertura: formatDateTime(atencion.apertura_en),
                 estadoPago: atencion.estado_pago || 'Pendiente',
                 items: itemsApi,
-                total: round2(ctx.pedidoActual.total || itemsApi.reduce((sum, item) => sum + item.subtotal, 0))
+                total: round2((pedidoActual ? pedidoActual.total : 0) || itemsApi.reduce((sum, item) => sum + item.subtotal, 0))
             };
         }
 
@@ -1091,7 +1206,7 @@
             }
         }
 
-        if (!found) {
+        if (!found && !apiAvailable()) {
             found = findClienteByDocumentoLocal(documento);
         }
 
@@ -1148,6 +1263,84 @@
 
         const panelNo = byId('lmClienteNoEncontradoPanel');
         if (panelNo) panelNo.classList.remove('d-none');
+
+        const altaWrap = byId('lmAltaClienteInlineWrap');
+        if (altaWrap) altaWrap.classList.add('d-none');
+    }
+
+    function mostrarAltaClienteLibre(documento) {
+        const altaWrap = byId('lmAltaClienteInlineWrap');
+        if (!altaWrap) return;
+        altaWrap.classList.remove('d-none');
+        const docInput = byId('lmQuickClienteDocumento');
+        if (docInput && documento) docInput.value = documento;
+    }
+
+    async function crearClienteLibreInline() {
+        const documento = String(byId('lmQuickClienteDocumento')?.value || '').trim();
+        const nombres = String(byId('lmQuickClienteNombres')?.value || '').trim();
+        const apellidos = String(byId('lmQuickClienteApellidos')?.value || '').trim();
+        const telefono = String(byId('lmQuickClienteTelefono')?.value || '').trim();
+        const email = String(byId('lmQuickClienteEmail')?.value || '').trim();
+        const tipoDocumento = String(byId('lmQuickClienteTipoDocumento')?.value || 'DNI').trim();
+
+        if (!documento || documento.length < 8 || !nombres || !apellidos) {
+            alert('Para crear cliente: documento (mín. 8), nombres y apellidos.');
+            return;
+        }
+
+        try {
+            let nuevo = null;
+
+            if (apiAvailable() && api && typeof api.crearCliente === 'function') {
+                const response = await api.crearCliente({
+                    tipoDocumento,
+                    documento,
+                    nombres,
+                    apellidos,
+                    telefono,
+                    email,
+                    activo: true
+                });
+                nuevo = response?.data || null;
+            } else {
+                nuevo = DB.insert('clientes', {
+                    documento,
+                    nombres,
+                    apellidos,
+                    telefono,
+                    email,
+                    activo: true
+                });
+            }
+
+            if (!nuevo?.id) {
+                alert('Cliente creado sin identificador en la respuesta.');
+                return;
+            }
+
+            const normalizado = {
+                id: nuevo.id,
+                nombreCompleto: nuevo.nombreCompleto || nuevo.nombre_completo || `${nuevo.nombres || nombres} ${nuevo.apellidos || apellidos}`.trim() || 'Cliente',
+                documento: nuevo.documento || documento,
+                telefono: nuevo.telefono || telefono,
+                email: nuevo.email || email
+            };
+
+            state.catalogs.clientes = [normalizado]
+                .concat((state.catalogs.clientes || []).filter((x) => String(x.id) !== String(normalizado.id)));
+
+            const docInput = byId('lmClienteDocumentoInput');
+            if (docInput) docInput.value = normalizado.documento;
+
+            const altaWrap = byId('lmAltaClienteInlineWrap');
+            if (altaWrap) altaWrap.classList.add('d-none');
+
+            renderClienteLibreSeleccionado(normalizado);
+            alert('Cliente creado y seleccionado correctamente.');
+        } catch (error) {
+            alert(extractApiMessage(error, 'No se pudo crear el cliente.'));
+        }
     }
 
     function buildClientesOptions(clientesSource) {
@@ -1165,10 +1358,18 @@
     function buildMozosOptions(mozosSource) {
         const usuarios = Array.isArray(mozosSource) && mozosSource.length
             ? mozosSource
-            : DB.getAll('usuarios').filter((usuario) => usuario.activo).map((usuario) => ({
+            : DB.getAll('usuarios').filter((usuario) => usuario.activo && isMozoRole(usuario)).map((usuario) => ({
                 id: usuario.id,
                 nombreCompleto: `${usuario.nombres} ${usuario.apellidos}`
             }));
+
+        if (!usuarios.length) {
+            return [
+                '<option value="">Seleccionar mozo...</option>',
+                '<option value="" disabled>No hay mozos disponibles</option>'
+            ].join('');
+        }
+
         return ['<option value="">Seleccionar mozo...</option>']
             .concat(usuarios.map((usuario) => `<option value="${usuario.id}">${escapeHtml(usuario.nombreCompleto || `${usuario.nombres || ''} ${usuario.apellidos || ''}`.trim())}</option>`))
             .join('');
@@ -1197,7 +1398,7 @@
         }
         if (!state.catalogs.mozos) {
             state.catalogs.mozos = DB.getAll('usuarios')
-                .filter((usuario) => usuario.activo)
+                .filter((usuario) => usuario.activo && isMozoRole(usuario))
                 .map((usuario) => ({ id: usuario.id, nombreCompleto: `${usuario.nombres} ${usuario.apellidos}` }));
         }
         if (!state.catalogs.platos) {
@@ -1226,7 +1427,15 @@
         if (state.catalogs.mozos && state.catalogs.mozos.length) return;
         try {
             const response = await api.listMozos({ rol: 'mozo', activo: true, page: 1, size: 200 });
-            const list = Array.isArray(response?.data) ? response.data : [];
+            let list = Array.isArray(response?.data) ? response.data : [];
+
+            // Fallback: algunos backends no aplican bien rol=mozo y devuelven vacío.
+            if (!list.length) {
+                const responseAll = await api.listMozos({ rol: '', activo: true, page: 1, size: 300 });
+                const listAll = Array.isArray(responseAll?.data) ? responseAll.data : [];
+                list = listAll.filter((usuario) => isMozoRole(usuario));
+            }
+
             state.catalogs.mozos = list.map((usuario) => ({
                 id: usuario.id,
                 nombreCompleto: usuario.nombreCompleto || usuario.nombre_completo || `${usuario.nombres || ''} ${usuario.apellidos || ''}`.trim() || 'Mozo'
@@ -1234,6 +1443,23 @@
         } catch {
             state.catalogs.mozos = [];
         }
+    }
+
+    function isMozoRole(usuario) {
+        const raw = String(
+            usuario?.rol
+            || usuario?.cargo
+            || usuario?.tipoRol
+            || usuario?.tipo_rol
+            || usuario?.role
+            || ''
+        ).trim().toLowerCase();
+
+        return raw.includes('mozo') || raw.includes('mesero');
+    }
+
+    function isUuid(value) {
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
     }
 
     async function ensurePlatosCatalog() {

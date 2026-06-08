@@ -149,6 +149,16 @@
             });
         },
 
+        anularAtencion(idAtencion, body = {}) {
+            return request(`/atenciones/${encodeURIComponent(idAtencion)}/situacion`, {
+                method: 'PATCH',
+                body: {
+                    estado: 'cancelada',
+                    ...body
+                }
+            });
+        },
+
         cancelarReserva(idReserva) {
             return request(`/reservas/${encodeURIComponent(idReserva)}/situacion`, {
                 method: 'PATCH',
