@@ -9,15 +9,20 @@
         pedidoId: '',
         search: '',
         propina: 0,
-        ultimoComprobante: null
+        ultimoComprobante: null,
+        mesas: [],
+        currentContexto: null
     };
 
-    document.addEventListener('DOMContentLoaded', init);
+    const api = window.ListaMesasApi || null;
+    const USE_API_ONLY = true;
 
-    function init() {
+    document.addEventListener('DOMContentLoaded', () => { void init(); });
+
+    async function init() {
         bindEvents();
-        loadMesas();
-        render();
+        await loadMesas();
+        await render();
     }
 
     function bindEvents() {
@@ -33,14 +38,14 @@
             mesaSelect.addEventListener('change', (event) => {
                 state.mesaId = event.target.value;
                 state.pedidoId = '';
-                render();
+                void render();
             });
         }
 
         if (pedidoSelect) {
             pedidoSelect.addEventListener('change', (event) => {
                 state.pedidoId = event.target.value;
-                render();
+                void render();
             });
         }
 
@@ -60,7 +65,7 @@
         }
 
         if (btnActualizar) {
-            btnActualizar.addEventListener('click', render);
+            btnActualizar.addEventListener('click', () => void render());
         }
 
         if (btnCobrar) {
@@ -79,26 +84,52 @@
         }
     }
 
-    function loadMesas() {
+    async function loadMesas() {
         const mesaSelect = byId('mesaPagoSelect');
         if (!mesaSelect) return;
 
-        const mesas = DB.getAll('mesas').filter((mesa) => mesa.activa);
-        mesaSelect.innerHTML = mesas.map((mesa) => `<option value="${mesa.id}">${mesa.codigo} (${mesa.ubicacion})</option>`).join('');
+        if (apiAvailable()) {
+            try {
+                const response = await api.getTablero();
+                const mesasApi = Array.isArray(response?.data) ? response.data : [];
+                state.mesas = mesasApi.map((item) => ({
+                    id: item.idMesa || item.id || '',
+                    codigo: item.codigo || `Mesa ${item.idMesa || item.id}`,
+                    ubicacion: item.ubicacion || '',
+                    activa: item.activa !== false,
+                    contexto: null
+                }));
+            } catch (error) {
+                console.error('Error cargando mesas desde API:', error);
+                state.mesas = [];
+            }
+        } else {
+            console.error('Modo API-only activado y no hay backend disponible para mesas.');
+            state.mesas = [];
+        }
 
-        if (!state.mesaId && mesas.length) {
-            const mesaConPendiente = mesas.find((mesa) => getAtencionesPendientesByMesa(mesa.id).length > 0);
-            state.mesaId = String((mesaConPendiente || mesas[0]).id);
+        const mesasActivas = state.mesas.filter((mesa) => mesa.activa);
+        if (!mesasActivas.length) {
+            mesaSelect.innerHTML = '';
+            state.mesaId = '';
+            return;
+        }
+
+        mesaSelect.innerHTML = mesasActivas.map((mesa) => `<option value="${mesa.id}">${mesa.codigo}${mesa.ubicacion ? ` (${mesa.ubicacion})` : ''}</option>`).join('');
+
+        if (!state.mesaId) {
+            state.mesaId = String(mesasActivas[0].id);
             mesaSelect.value = state.mesaId;
         }
     }
 
-    function render() {
+    async function render() {
         if (!state.mesaId) {
             clearUI();
             return;
         }
 
+        await ensureCurrentMesaContext();
         fillPedidosFilter();
         renderTable();
         renderStats();
@@ -184,7 +215,7 @@
         const statTotal = byId('statTotalItems');
         const statSubtotal = byId('statSubtotal');
 
-        const mesa = DB.getById('mesas', state.mesaId);
+        const mesa = getMesaById(state.mesaId);
         const etiquetaPedido = pedidos.length
             ? `#${pedidos[0].id} - ${mesa ? mesa.codigo : 'Mesa'}`
             : `${mesa ? mesa.codigo : 'Mesa'} sin pedidos`;
@@ -208,7 +239,7 @@
         setText('pagoTotal', money(total));
     }
 
-    function cobrarMesa() {
+    async function cobrarMesa() {
         if (!state.mesaId) {
             alert('Seleccione una mesa para cobrar.');
             return;
@@ -223,41 +254,57 @@
         const confirmar = confirm(`Confirma el cobro de ${comprobante.mesaCodigo} por ${money(comprobante.total)}?`);
         if (!confirmar) return;
 
-        const atencionesPendientes = getAtencionesPendientesByMesa(state.mesaId);
-        atencionesPendientes.forEach((atencion) => {
-            DB.update('atenciones', atencion.id, {
-                estado_pago: 'Pagado',
-                estado: atencion.estado === 'Cerrada' ? atencion.estado : 'Cerrada',
-                cierre_en: atencion.cierre_en || new Date().toISOString().slice(0, 16)
+        if (!apiAvailable()) {
+            alert('No es posible cobrar la mesa porque el backend no está disponible.');
+            return;
+        }
+
+        const atencion = state.currentContexto?.atencionActiva;
+        if (!atencion || !atencion.id) {
+            alert('No se encontró una atención activa para esta mesa.');
+            return;
+        }
+
+        try {
+            const response = await api.cobrarAtencion(atencion.id, {
+                metodoPago: comprobante.metodoPago || 'Efectivo',
+                propina: round2(comprobante.propina),
+                observaciones: '',
+                generarComprobante: true
             });
-        });
 
-        const nuevoComprobante = DB.insert('comprobantes', {
-            fecha: new Date().toISOString(),
-            mesa_id: Number(state.mesaId),
-            mesa_codigo: comprobante.mesaCodigo,
-            metodo_pago: comprobante.metodoPago,
-            subtotal: round2(comprobante.subtotal),
-            propina: round2(comprobante.propina),
-            total: round2(comprobante.total),
-            items: comprobante.items
-        });
+            const data = response?.data || {};
+            const comprobanteApi = {
+                id: data.idComprobante || `PED-${atencion.id}`,
+                fecha: data.fechaEmision || new Date().toISOString(),
+                mesaCodigo: comprobante.mesaCodigo,
+                clienteNombre: comprobante.clienteNombre,
+                clienteDocumento: comprobante.clienteDocumento,
+                metodoPago: data.metodoPago || comprobante.metodoPago || 'Efectivo',
+                subtotal: Number(data.subtotal || comprobante.subtotal || 0),
+                propina: Number(data.propina || comprobante.propina || 0),
+                total: Number(data.total || comprobante.total || 0),
+                items: comprobante.items
+            };
 
-        state.ultimoComprobante = {
-            ...comprobante,
-            numero: nuevoComprobante.id,
-            fecha: nuevoComprobante.fecha
-        };
+            state.ultimoComprobante = comprobanteApi;
+            await render();
 
-        render();
-        alert('Pago registrado correctamente.');
+            if (data.generarComprobante !== false && comprobanteApi.items.length) {
+                printComprobante(comprobanteApi);
+            }
+
+            alert(`Pago registrado. Total cobrado: ${money(comprobanteApi.total)}`);
+        } catch (error) {
+            alert(extractApiMessage(error, 'No se pudo registrar el cobro.'));
+        }
     }
 
     function buildComprobanteData() {
         if (!state.mesaId) return null;
 
         const items = getDetalleItemsByMesa(state.mesaId);
-        const mesa = DB.getById('mesas', state.mesaId);
+        const mesa = getMesaById(state.mesaId);
         const clienteInfo = getClienteInfoByMesa(state.mesaId);
         const metodoPago = byId('metodoPagoSelect') ? byId('metodoPagoSelect').value : 'Efectivo';
 
@@ -367,59 +414,136 @@
     }
 
     function getDetalleItemsByMesa(mesaId) {
-        const mesaAtenciones = getAtencionesPendientesByMesa(mesaId);
-        if (!mesaAtenciones.length) return [];
+        const contexto = state.currentContexto;
+        if (!contexto || !contexto.pedidoActual || String(contexto.mesaId) !== String(mesaId)) return [];
 
-        const atencionIds = new Set(mesaAtenciones.map((atencion) => Number(atencion.id)));
-        const pedidos = DB.getAll('pedidos').filter((pedido) => atencionIds.has(Number(pedido.id_atencion)));
-        const pedidoMap = new Map(pedidos.map((pedido) => [Number(pedido.id), pedido]));
-        const pedidoIds = new Set(pedidos.map((pedido) => Number(pedido.id)));
+        const pedidoActual = contexto.pedidoActual;
+        const mesa = getMesaById(mesaId);
 
-        const platos = DB.getAll('platos');
-        const categorias = DB.getAll('categorias');
-
-        return DB.getAll('detallePedidos')
-            .filter((item) => pedidoIds.has(Number(item.id_pedido)))
-            .map((item) => {
-                const plato = platos.find((p) => Number(p.id) === Number(item.id_plato));
-                const categoria = plato ? categorias.find((c) => Number(c.id) === Number(plato.id_categoria)) : null;
-                const subtotal = calcSubtotal(item.cantidad, item.precio_unit, item.descuento);
-                const pedido = pedidoMap.get(Number(item.id_pedido));
-                const atencion = pedido
-                    ? mesaAtenciones.find((a) => Number(a.id) === Number(pedido.id_atencion))
-                    : null;
-                const mesa = atencion ? DB.getById('mesas', atencion.id_mesa) : null;
-
-                return {
-                    ...item,
-                    platoNombre: plato ? plato.nombre : `Plato #${item.id_plato}`,
-                    categoriaNombre: categoria ? categoria.nombre : 'Sin categoria',
-                    mesaCodigo: mesa ? mesa.codigo : 'Mesa',
-                    subtotal
-                };
-            });
+        return Array.isArray(pedidoActual.items) ? pedidoActual.items.map((item) => {
+            const subtotal = Number(item.subtotal || calcSubtotal(item.cantidad, item.precioUnit, item.descuento));
+            return {
+                id: item.idDetalle || item.id || '',
+                id_pedido: item.idPedido || pedidoActual.idPedido || '',
+                platoNombre: item.nombreItem || item.platoNombre || item.productoNombre || 'Ítem',
+                categoriaNombre: item.categoriaNombre || '',
+                cantidad: Number(item.cantidad || 0),
+                precio_unit: Number(item.precioUnit || item.precio_unit || 0),
+                descuento: Number(item.descuento || 0),
+                subtotal,
+                mesaCodigo: mesa ? mesa.codigo : 'Mesa'
+            };
+        }) : [];
     }
 
     function getPedidosByMesa(mesaId) {
-        const atenciones = getAtencionesPendientesByMesa(mesaId);
-        if (!atenciones.length) return [];
-
-        const atencionIds = new Set(atenciones.map((atencion) => Number(atencion.id)));
-        const mesa = DB.getById('mesas', mesaId);
-
-        return DB.getAll('pedidos')
-            .filter((pedido) => atencionIds.has(Number(pedido.id_atencion)))
-            .map((pedido) => ({
-                ...pedido,
+        const contexto = state.currentContexto;
+        if (!contexto || !contexto.pedidoActual || String(contexto.mesaId) !== String(mesaId)) return [];
+        const pedidos = [];
+        const pedidoActual = contexto.pedidoActual;
+        if (pedidoActual && (pedidoActual.idPedido || pedidoActual.id)) {
+            const mesa = getMesaById(mesaId);
+            pedidos.push({
+                id: pedidoActual.idPedido || pedidoActual.id || '',
                 mesaCodigo: mesa ? mesa.codigo : 'Mesa'
-            }));
+            });
+        }
+        return pedidos;
     }
 
     function getAtencionesPendientesByMesa(mesaId) {
-        return DB.getAll('atenciones').filter((atencion) => (
-            Number(atencion.id_mesa) === Number(mesaId) &&
-            atencion.estado_pago !== 'Pagado'
-        ));
+        const contexto = state.currentContexto;
+        if (!contexto || !contexto.atencionActiva || String(contexto.mesaId) !== String(mesaId)) return [];
+        return [contexto.atencionActiva];
+    }
+
+    function getClienteInfoByMesa(mesaId) {
+        const contexto = state.currentContexto;
+        if (!contexto || !contexto.atencionActiva || String(contexto.mesaId) !== String(mesaId)) {
+            return { nombre: 'Sin cliente', documento: '-' };
+        }
+
+        const atencion = contexto.atencionActiva;
+        const nombre = atencion.clienteNombre || atencion.cliente_nombre || 'Sin cliente';
+        const documento = atencion.clienteDocumento || atencion.cliente_documento || '-';
+        return {
+            nombre,
+            documento
+        };
+    }
+
+    async function ensureCurrentMesaContext() {
+        if (!state.mesaId) {
+            state.currentContexto = null;
+            return null;
+        }
+
+        if (!apiAvailable()) {
+            state.currentContexto = null;
+            return null;
+        }
+
+        try {
+            const response = await api.getContextoMesa(state.mesaId);
+            const contexto = normalizeApiContext(response?.data || {});
+            state.currentContexto = {
+                mesaId: state.mesaId,
+                ...contexto
+            };
+            return state.currentContexto;
+        } catch (error) {
+            console.error('Error cargando contexto de mesa:', error);
+            state.currentContexto = null;
+            return null;
+        }
+    }
+
+    function apiAvailable() {
+        return USE_API_ONLY && !!api;
+    }
+
+    function normalizeApiContext(raw) {
+        const atencionActiva = raw.atencionActiva ? normalizeApiAtencion(raw.atencionActiva) : null;
+        const pedidoActual = raw.pedidoActual ? normalizePedidoActual(raw.pedidoActual) : null;
+        return { atencionActiva, pedidoActual };
+    }
+
+    function normalizeApiAtencion(raw) {
+        return {
+            id: raw.idAtencion || raw.id || null,
+            id_cliente: raw.idCliente || raw.id_cliente || null,
+            clienteNombre: raw.clienteNombre || raw.cliente_nombre || null,
+            clienteDocumento: raw.clienteDocumento || raw.cliente_documento || null,
+            estado_pago: raw.estadoPago || raw.estado_pago || null,
+            apertura_en: raw.aperturaEn || raw.apertura_en || null,
+            estado: raw.estado || null
+        };
+    }
+
+    function normalizePedidoActual(raw) {
+        if (!raw || typeof raw !== 'object') return null;
+        return {
+            idPedido: raw.idPedido || raw.id || null,
+            subtotal: Number(raw.subtotal || 0),
+            propina: Number(raw.propina || 0),
+            total: Number(raw.total || 0),
+            items: Array.isArray(raw.items) ? raw.items.map((item) => ({
+                idDetalle: item.idDetalle || item.id || null,
+                idPedido: item.idPedido || raw.idPedido || raw.id || null,
+                tipoItem: item.tipoItem || item.tipo_item || 'plato',
+                idItem: item.idItem || item.idPlato || item.idProducto || item.id || null,
+                nombreItem: item.nombreItem || item.nombre_item || item.platoNombre || item.productoNombre || 'Ítem',
+                cantidad: Number(item.cantidad || 0),
+                precioUnit: Number(item.precioUnit || item.precio_unit || 0),
+                descuento: Number(item.descuento || 0),
+                estadoCocina: item.estadoCocina || item.estado_cocina || 'pendiente',
+                subtotal: Number(item.subtotal || 0)
+            })) : []
+        };
+    }
+
+    function getMesaById(mesaId) {
+        return state.mesas.find((mesa) => String(mesa.id) === String(mesaId)) || null;
     }
 
     function clearUI() {
@@ -439,32 +563,18 @@
     }
 
     function getClienteInfoByMesa(mesaId) {
-        const atencionesMesa = DB.getAll('atenciones').filter(
-            (atencion) => Number(atencion.id_mesa) === Number(mesaId)
-        );
-
-        if (!atencionesMesa.length) {
+        const contexto = state.currentContexto;
+        if (!contexto || !contexto.atencionActiva || String(contexto.mesaId) !== String(mesaId)) {
             return { nombre: 'Sin cliente', documento: '-' };
         }
 
-        const atencionConClientePendiente = atencionesMesa.find(
-            (atencion) => atencion.estado_pago !== 'Pagado' && atencion.id_cliente
-        );
+        const atencion = contexto.atencionActiva;
+        const nombreCompleto = atencion.clienteNombre || atencion.cliente_nombre || 'Sin cliente';
+        const documento = atencion.clienteDocumento || atencion.cliente_documento || '-';
 
-        const atencionConCliente = atencionConClientePendiente || atencionesMesa.find((atencion) => atencion.id_cliente);
-        if (!atencionConCliente) {
-            return { nombre: 'Sin cliente', documento: '-' };
-        }
-
-        const cliente = DB.getById('clientes', atencionConCliente.id_cliente);
-        if (!cliente) {
-            return { nombre: 'Sin cliente', documento: '-' };
-        }
-
-        const nombreCompleto = [cliente.nombres, cliente.apellidos].filter(Boolean).join(' ').trim() || 'Sin cliente';
         return {
             nombre: nombreCompleto,
-            documento: cliente.documento || '-'
+            documento
         };
     }
 

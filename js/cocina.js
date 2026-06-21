@@ -5,6 +5,8 @@
 
 (() => {
     const AUTO_REFRESH_MS = 15000;
+    const USE_API_ONLY = true;
+    const api = window.ListaMesasApi || null;
 
     const state = {
         search: '',
@@ -12,11 +14,11 @@
         autoRefreshId: null
     };
 
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => { void init(); });
 
-    function init() {
+    async function init() {
         bindEvents();
-        render();
+        await render();
         startAutoRefresh();
     }
 
@@ -49,15 +51,54 @@
         }
     }
 
-    function render() {
-        const rows = buildKitchenRows();
+    async function render() {
+        const rows = await loadKitchenRows();
         const filtered = applyFilters(rows);
 
         renderTable(filtered, rows.length);
         renderStats(rows);
     }
 
-    function buildKitchenRows() {
+    async function loadKitchenRows() {
+        if (apiAvailable()) {
+            try {
+                const response = await api.getCocina({
+                    estado: state.estado !== 'todos' ? state.estado : undefined,
+                    search: state.search || undefined
+                });
+                const items = Array.isArray(response?.items)
+                    ? response.items
+                    : Array.isArray(response?.data?.items)
+                        ? response.data.items
+                        : [];
+                return items.map(normalizeApiKitchenItem);
+            } catch (error) {
+                console.error('Error cargando cocina desde API:', error);
+                return [];
+            }
+        }
+
+        return buildKitchenRowsFromDb();
+    }
+
+    function normalizeApiKitchenItem(raw) {
+        const estado = normalizeEstadoCocina(raw.estadoCocina || raw.estado_cocina || raw.estado);
+
+        return {
+            detalleId: raw.detalleId || raw.idDetalle || raw.id || '',
+            pedidoId: raw.pedidoId || raw.idPedido || raw.id_pedido || '',
+            mesaCodigo: raw.mesaCodigo || raw.mesa_codigo || raw.mesa || 'Sin mesa',
+            platoNombre: raw.platoNombre || raw.nombre || raw.nombreItem || raw.plato_nombre || 'Plato',
+            cantidad: Number(raw.cantidad || 0),
+            horaEnvio: formatDateTime(raw.creadoEn || raw.creado_en || raw.enviadoEn || raw.enviado_en),
+            envioTs: toTimestamp(raw.creadoEn || raw.creado_en || raw.enviadoEn || raw.enviado_en),
+            estado,
+            estadoTexto: estadoLabel(estado),
+            observaciones: String(raw.observaciones || raw.notas || '').trim()
+        };
+    }
+
+    function buildKitchenRowsFromDb() {
         const pedidos = DB.getAll('pedidos');
         const detalles = DB.getAll('detallePedidos');
         const platos = DB.getAll('platos');
@@ -144,9 +185,9 @@
                 </tr>
             `;
         } else {
-            tbody.innerHTML = rows.map((row) => `
+            tbody.innerHTML = rows.map((row, index) => `
                 <tr>
-                    <td><span class="record-id">#${row.pedidoId}</span></td>
+                    <td><span class="record-id">#${index + 1}</span></td>
                     <td><span class="badge-pill bp-gray">${row.mesaCodigo}</span></td>
                     <td class="fw-semibold">
                         ${escapeHtml(row.platoNombre)}
@@ -249,20 +290,29 @@
         `;
     }
 
-    function handleTableActions(event) {
+    async function handleTableActions(event) {
         const btn = event.target.closest('[data-action][data-detalle-id]');
         if (!btn) return;
 
         const action = normalizeEstadoCocina(btn.dataset.action);
-        const detalleId = Number(btn.dataset.detalleId);
+        const detalleId = String(btn.dataset.detalleId).trim();
         if (!detalleId) return;
 
-        DB.update('detallePedidos', detalleId, {
-            estado_cocina: action,
-            actualizado_cocina_en: new Date().toISOString()
-        });
+        if (apiAvailable()) {
+            try {
+                await api.cambiarEstadoItem(detalleId, action);
+            } catch (error) {
+                alert(extractApiMessage(error, 'No se pudo cambiar el estado del ítem.'));
+                return;
+            }
+        } else {
+            DB.update('detallePedidos', Number(detalleId), {
+                estado_cocina: action,
+                actualizado_cocina_en: new Date().toISOString()
+            });
+        }
 
-        render();
+        await render();
     }
 
     function startAutoRefresh() {
@@ -281,6 +331,17 @@
         if (!isoValue) return Number.MAX_SAFE_INTEGER;
         const ts = new Date(isoValue).getTime();
         return Number.isNaN(ts) ? Number.MAX_SAFE_INTEGER : ts;
+    }
+
+    function apiAvailable() {
+        return USE_API_ONLY && !!api && typeof api.getCocina === 'function' && typeof api.cambiarEstadoItem === 'function';
+    }
+
+    function extractApiMessage(error, fallbackMessage) {
+        if (error && typeof error.message === 'string' && error.message.trim()) {
+            return error.message;
+        }
+        return fallbackMessage || 'Ocurrió un error al comunicarse con el backend.';
     }
 
     function formatDateTime(isoValue) {

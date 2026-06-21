@@ -8,6 +8,7 @@
     const DEFAULT_UBICACION = 'Salón principal';
     const RESERVA_DURACION_MINUTOS = 120;
     const api = window.ListaMesasApi || null;
+    const USE_API_ONLY = true;
     const state = {
         rows: [],
         selected: null,
@@ -42,8 +43,12 @@
         }
 
         if (!apiAvailable()) {
-            ensureMesa1Ocupada();
-            ensureDemoReservation();
+            if (USE_API_ONLY) {
+                console.error('Modo API-only activado pero el backend o ListaMesasApi no está disponible.');
+            } else {
+                ensureMesa1Ocupada();
+                ensureDemoReservation();
+            }
         }
         render();
     }
@@ -110,7 +115,7 @@
     }
 
     function apiAvailable() {
-        return !!api;
+        return USE_API_ONLY && !!api;
     }
 
     function extractApiMessage(error, fallback) {
@@ -127,10 +132,17 @@
                 const response = await api.getTablero(fechaHoraReferencia);
                 const rows = Array.isArray(response?.data) ? response.data.map(mapApiMesaToBoardRow) : [];
                 state.dataSource = 'api';
-                if (rows.length) return rows;
-            } catch {
-                state.dataSource = 'local';
+                return rows;
+            } catch (error) {
+                state.dataSource = 'api';
+                console.error('Error cargando tablero desde API:', error);
+                return [];
             }
+        }
+
+        if (USE_API_ONLY) {
+            console.error('Backend no disponible y el modo de carga está configurado para API only.');
+            return [];
         }
 
         state.dataSource = 'local';
@@ -311,7 +323,7 @@
                 await ensureClientesCatalog();
                 await ensureMozosCatalog();
             }
-            openModalOcupada(mesa);
+            await openModalOcupada(mesa);
             return;
         }
         if (mesa.estado === 'reservada') {
@@ -327,23 +339,7 @@
         const reservaActiva = mapApiReserva(contexto.reservaActiva || null);
         const atencionActiva = mapApiAtencion(contexto.atencionActiva || null);
         const pedidoActualRaw = contexto.pedidoActual || null;
-        const pedidoActual = pedidoActualRaw ? {
-            idPedido: pedidoActualRaw.idPedido || pedidoActualRaw.id || null,
-            subtotal: Number(pedidoActualRaw.subtotal || 0),
-            propina: Number(pedidoActualRaw.propina || 0),
-            total: Number(pedidoActualRaw.total || 0),
-            items: Array.isArray(pedidoActualRaw.items) ? pedidoActualRaw.items.map((item) => ({
-                idDetalle: item.idDetalle || item.id || null,
-                idPedido: item.idPedido || pedidoActualRaw.idPedido || null,
-                tipoItem: item.tipoItem || item.tipo_item || 'plato',
-                nombreItem: item.nombreItem || item.nombre_item || item.platoNombre || 'Ítem',
-                cantidad: Number(item.cantidad || 0),
-                precioUnit: Number(item.precioUnit || item.precio_unit || 0),
-                descuento: Number(item.descuento || 0),
-                estadoCocina: item.estadoCocina || item.estado_cocina || 'pendiente',
-                subtotal: Number(item.subtotal || 0)
-            })) : []
-        } : null;
+        const pedidoActual = pedidoActualRaw ? normalizePedidoActual(pedidoActualRaw) : null;
 
         return {
             mesa: contexto.mesa || null,
@@ -353,7 +349,44 @@
         };
     }
 
-    function openModalOcupada(mesa) {
+    function normalizePedidoActual(raw) {
+        if (!raw || typeof raw !== 'object') return null;
+        return {
+            idPedido: raw.idPedido || raw.id || null,
+            subtotal: Number(raw.subtotal || 0),
+            propina: Number(raw.propina || 0),
+            total: Number(raw.total || 0),
+            items: Array.isArray(raw.items) ? raw.items.map((item) => ({
+                idDetalle: item.idDetalle || item.id || null,
+                idPedido: item.idPedido || raw.idPedido || raw.id || null,
+                tipoItem: item.tipoItem || item.tipo_item || 'plato',
+                idItem: item.idItem || item.idPlato || item.idProducto || item.id || null,
+                nombreItem: item.nombreItem || item.nombre_item || item.platoNombre || item.productoNombre || 'Ítem',
+                cantidad: Number(item.cantidad || 0),
+                precioUnit: Number(item.precioUnit || item.precio_unit || 0),
+                descuento: Number(item.descuento || 0),
+                estadoCocina: item.estadoCocina || item.estado_cocina || 'pendiente',
+                subtotal: Number(item.subtotal || 0)
+            })) : []
+        };
+    }
+
+    async function fetchPedidoActual(atencion, mesa = null) {
+        if (!apiAvailable() || !atencion?.id) return null;
+        try {
+            const response = await api.getPedidoActual(atencion.id);
+            const pedidoActual = normalizePedidoActual(response?.data || null);
+            if (mesa && mesa.contextoApi) {
+                mesa.contextoApi.pedidoActual = pedidoActual;
+            }
+            return pedidoActual;
+        } catch (error) {
+            console.error('Error cargando pedido actual:', error);
+            return null;
+        }
+    }
+
+    async function openModalOcupada(mesa) {
         const modalTitle = byId('lmModalTitle');
         const modalBody = byId('lmModalBody');
         const modalFooter = byId('lmModalFooter');
@@ -364,6 +397,11 @@
             alert('No se encontró una atención activa para esta mesa.');
             return;
         }
+
+        if (apiAvailable() && atencion && mesa) {
+            await fetchPedidoActual(atencion, mesa);
+        }
+
         const detalle = buildAtencionDetalle(atencion, mesa);
 
         modalTitle.textContent = `${mesa.codigo} · Mesa ocupada`;
@@ -443,13 +481,17 @@
                 const btn = event.target.closest('[data-item-action][data-item-detalle-id]');
                 if (!btn) return;
                 const nuevoEstado = btn.dataset.itemAction;
-                const detalleId = Number(btn.dataset.itemDetalleId);
+                const detalleId = String(btn.dataset.itemDetalleId || '').trim();
                 if (!detalleId || !nuevoEstado) return;
                 try {
                     if (apiAvailable() && atencion && atencion.id) {
-                        await api.cambiarEstadoItem(detalleId, nuevoEstado);
+                        if (nuevoEstado === 'cancelado') {
+                            await api.eliminarDetallePedido(detalleId);
+                        } else {
+                            await api.cambiarEstadoItem(detalleId, nuevoEstado);
+                        }
                     } else {
-                        DB.update('detallePedidos', detalleId, {
+                        DB.update('detallePedidos', Number(detalleId), {
                             estado_cocina: nuevoEstado,
                             actualizado_cocina_en: new Date().toISOString()
                         });
@@ -612,6 +654,11 @@
                 alert(extractApiMessage(error, 'No se pudo registrar el cobro.'));
                 return;
             }
+        }
+
+        if (USE_API_ONLY) {
+            alert('No es posible cobrar la mesa porque el backend no está disponible.');
+            return;
         }
 
         DB.update('atenciones', atencion.id, {
@@ -943,6 +990,11 @@
             }
         }
 
+        if (USE_API_ONLY) {
+            alert('No es posible ocupar la mesa porque el backend no está disponible o falta el ID de mesa.');
+            return;
+        }
+
         const now = new Date();
         const mesaId = ensureMesaPersisted(mesa);
 
@@ -990,7 +1042,7 @@
     }
 
     function buildAtencionDetalle(atencion, mesa = null) {
-        if (apiAvailable() && mesa && mesa.contextoApi) {
+        if (apiAvailable() && mesa?.contextoApi) {
             const ctx = mesa.contextoApi;
             const pedidoActual = ctx.pedidoActual || null;
             const clienteApi = (state.catalogs.clientes || []).find((cliente) => String(cliente.id) === String(atencion.id_cliente || ctx.reservaActiva?.id_cliente || '')) || null;
@@ -1017,6 +1069,19 @@
                 estadoPago: atencion.estado_pago || 'Pendiente',
                 items: itemsApi,
                 total: round2((pedidoActual ? pedidoActual.total : 0) || itemsApi.reduce((sum, item) => sum + item.subtotal, 0))
+            };
+        }
+
+        if (USE_API_ONLY) {
+            return {
+                clienteNombre: 'Cliente',
+                clienteDocumento: '-',
+                clienteTelefono: '-',
+                mozoNombre: 'Mozo',
+                apertura: formatDateTime(atencion?.apertura_en),
+                estadoPago: atencion?.estado_pago || 'Pendiente',
+                items: [],
+                total: 0
             };
         }
 
@@ -1063,7 +1128,7 @@
             return '<tr><td colspan="6" class="text-center text-muted py-4">No hay pedidos registrados.</td></tr>';
         }
 
-        return items.map((item) => {
+        return items.map((item, index) => {
             const yaFinal = item.estadoPlato === 'cancelado';
             const entregadoBtn = item.estadoPlato !== 'entregado' && !yaFinal
                 ? `<button class="btn btn-sm btn-outline-primary py-0 px-2" title="Marcar entregado" data-item-action="entregado" data-item-detalle-id="${item.detalleId}"><i class="bi bi-bag-check"></i></button>`
@@ -1077,7 +1142,7 @@
 
             return `
                 <tr>
-                    <td><span class="record-id">#${item.pedidoId}</span></td>
+                    <td><span class="record-id">#${index + 1}</span></td>
                     <td>${escapeHtml(item.platoNombre)}</td>
                     <td class="text-center">${item.cantidad}</td>
                     <td>${platoEstadoBadge(item.estadoPlato)}</td>
@@ -1097,8 +1162,11 @@
     }
 
     function getMesaAtencion(mesa) {
-        if (apiAvailable() && mesa && mesa.contextoApi && mesa.contextoApi.atencionActiva) {
+        if (apiAvailable() && mesa?.contextoApi?.atencionActiva) {
             return mesa.contextoApi.atencionActiva;
+        }
+        if (USE_API_ONLY) {
+            return null;
         }
         return mesa ? mesa.atencionActiva : null;
     }
@@ -1172,11 +1240,11 @@
             const cantidad = row.querySelector('[data-item-cantidad]');
             const precio = plato?.selectedOptions?.[0]?.dataset?.precio;
             return {
-                platoId: Number(plato ? plato.value : 0),
+                platoId: String(plato ? plato.value : '').trim(),
                 cantidad: Number(cantidad ? cantidad.value : 0),
                 precio: Number(precio || 0)
             };
-        }).filter((item) => item.platoId > 0 && item.cantidad > 0);
+        }).filter((item) => item.platoId && item.cantidad > 0);
     }
 
     async function buscarClienteLibrePorDocumento() {
@@ -1185,6 +1253,13 @@
         if (!documento) {
             alert('Ingresa un documento para buscar cliente.');
             return;
+        }
+
+        if (!apiAvailable()) {
+            if (USE_API_ONLY) {
+                alert('No es posible buscar clientes porque el backend no está disponible.');
+                return;
+            }
         }
 
         const clienteIdInput = byId('lmClienteSelect');
@@ -1206,7 +1281,12 @@
             }
         }
 
-        if (!found && !apiAvailable()) {
+        if (!found && USE_API_ONLY) {
+            renderClienteLibreNoEncontrado();
+            return;
+        }
+
+        if (!found) {
             found = findClienteByDocumentoLocal(documento);
         }
 
@@ -1303,6 +1383,9 @@
                     activo: true
                 });
                 nuevo = response?.data || null;
+            } else if (USE_API_ONLY) {
+                alert('No es posible crear el cliente porque el backend no está disponible.');
+                return;
             } else {
                 nuevo = DB.insert('clientes', {
                     documento,
@@ -1495,6 +1578,7 @@
 
     function ensureMesaPersisted(mesa) {
         if (mesa.mesaReal && mesa.mesaReal.id) return Number(mesa.mesaReal.id);
+        if (USE_API_ONLY) return null;
 
         const numero = Number(mesa.numero);
         const codigo = `M-${String(numero).padStart(2, '0')}`;
@@ -1752,6 +1836,11 @@
                 return;
             }
         }
+
+        if (USE_API_ONLY) {
+            alert('No es posible cancelar la reserva porque el backend no está disponible.');
+            return;
+        }
         
         DB.update('reservas', reserva.id, {
             estado: 'Cancelada',
@@ -1769,10 +1858,10 @@
         }
         const platos = (state.catalogs.platos && state.catalogs.platos.length)
             ? state.catalogs.platos
-            : DB.getAll('platos').filter((plato) => plato.activo && plato.disponible !== false);
+            : (USE_API_ONLY ? [] : DB.getAll('platos').filter((plato) => plato.activo && plato.disponible !== false));
         const productos = (state.catalogs.productos && state.catalogs.productos.length)
             ? state.catalogs.productos
-            : DB.getAll('productos').filter((p) => p.activo && Number(p.stock || 0) > 0);
+            : (USE_API_ONLY ? [] : DB.getAll('productos').filter((p) => p.activo && Number(p.stock || 0) > 0));
 
         const buildCards = (items, tipo) => items.map((item) => `
             <div class="col-lg-4 col-md-6">
@@ -1837,7 +1926,7 @@
         modalBody.addEventListener('click', (event) => {
             const card = event.target.closest('[data-item-id][data-item-tipo]');
             if (!card) return;
-            const itemId = Number(card.dataset.itemId);
+            const itemId = String(card.dataset.itemId || '').trim();
             const tipo = card.dataset.itemTipo;
             const nombre = card.dataset.itemNombre;
             const precio = Number(card.dataset.itemPrecio);
@@ -1915,7 +2004,7 @@
     }
 
     async function agregarPlatoAtencion(atencion, platoId, cantidad, precioUnit, observaciones) {
-        if (!atencion || cantidad <= 0 || platoId <= 0) { alert('Datos inválidos.'); return; }
+        if (!atencion || cantidad <= 0 || !platoId) { alert('Datos inválidos.'); return; }
 
         if (apiAvailable() && atencion.id) {
             try {
@@ -1933,6 +2022,11 @@
                 alert(extractApiMessage(error, 'No se pudo agregar el plato.'));
                 return;
             }
+        }
+
+        if (USE_API_ONLY) {
+            alert('No es posible agregar el plato porque el backend no está disponible.');
+            return;
         }
 
         const pedidos = DB.getAll('pedidos').filter((pedido) => Number(pedido.id_atencion) === Number(atencion.id));
@@ -1957,7 +2051,7 @@
     }
 
     async function agregarProductoAtencion(atencion, productoId, cantidad, precioUnit) {
-        if (!atencion || cantidad <= 0 || productoId <= 0) { alert('Datos inválidos.'); return; }
+        if (!atencion || cantidad <= 0 || !productoId) { alert('Datos inválidos.'); return; }
 
         if (apiAvailable() && atencion.id) {
             try {
@@ -1975,6 +2069,11 @@
                 alert(extractApiMessage(error, 'No se pudo agregar el producto.'));
                 return;
             }
+        }
+
+        if (USE_API_ONLY) {
+            alert('No es posible agregar el producto porque el backend no está disponible.');
+            return;
         }
 
         const pedidos = DB.getAll('pedidos').filter((pedido) => Number(pedido.id_atencion) === Number(atencion.id));

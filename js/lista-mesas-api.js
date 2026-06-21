@@ -114,6 +114,14 @@
             return request(`/lista-mesas/${encodeURIComponent(idMesa)}/contexto${toQuery({ fechaHora })}`);
         },
 
+        getPedidoActual(idAtencion) {
+            return request(`/atenciones/${encodeURIComponent(idAtencion)}/pedido-actual`);
+        },
+
+        getCocina(params = {}) {
+            return request(`/cocina${toQuery(params)}`);
+        },
+
         ocuparMesa(idMesa, body) {
             return request(`/lista-mesas/${encodeURIComponent(idMesa)}/ocupar`, {
                 method: 'POST',
@@ -139,6 +147,12 @@
             return request(`/detalle-pedidos/${encodeURIComponent(idDetalle)}/estado`, {
                 method: 'PATCH',
                 body: { estadoCocina }
+            });
+        },
+
+        eliminarDetallePedido(idDetalle) {
+            return request(`/detalle-pedidos/${encodeURIComponent(idDetalle)}`, {
+                method: 'DELETE'
             });
         },
 
