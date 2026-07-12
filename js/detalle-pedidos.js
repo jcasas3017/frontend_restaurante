@@ -268,7 +268,9 @@
         try {
             const response = await api.cobrarAtencion(atencion.id, {
                 metodoPago: comprobante.metodoPago || 'Efectivo',
+                subtotal: round2(comprobante.subtotal),
                 propina: round2(comprobante.propina),
+                total: round2(comprobante.total),
                 observaciones: '',
                 generarComprobante: true
             });
@@ -276,10 +278,12 @@
             const data = response?.data || {};
             const comprobanteApi = {
                 id: data.idComprobante || `PED-${atencion.id}`,
+                numero: data.numeroComprobante || `PED-${atencion.id}`,
                 fecha: data.fechaEmision || new Date().toISOString(),
                 mesaCodigo: comprobante.mesaCodigo,
-                clienteNombre: comprobante.clienteNombre,
-                clienteDocumento: comprobante.clienteDocumento,
+                codigoAtencion: data.codigoAtencion || atencion.codigo || atencion.codigoAtencion || null,
+                clienteNombre: data.clienteNombre || comprobante.clienteNombre,
+                clienteDocumento: data.clienteDocumento || comprobante.clienteDocumento,
                 metodoPago: data.metodoPago || comprobante.metodoPago || 'Efectivo',
                 subtotal: Number(data.subtotal || comprobante.subtotal || 0),
                 propina: Number(data.propina || comprobante.propina || 0),
@@ -367,6 +371,7 @@
                 <h2>RestaControl</h2>
                 <p>Comprobante: ${comprobante.numero}</p>
                 <p>Mesa: ${comprobante.mesaCodigo}</p>
+                <p>Código de atención: ${comprobante.codigoAtencion || 'N/A'}</p>
                 <p>Cliente: ${comprobante.clienteNombre}</p>
                 <p>Documento: ${comprobante.clienteDocumento}</p>
                 <p>Fecha: ${fechaFmt}</p>

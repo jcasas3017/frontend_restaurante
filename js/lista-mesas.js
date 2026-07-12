@@ -582,11 +582,13 @@
         if (!modalTitle || !modalBody || !modalFooter) return;
 
         modalTitle.textContent = `${mesa.codigo} · Resumen de pago`;
+        const codigoAtencion = atencion?.codigo || atencion?.codigoAtencion || formatRecordId(atencion.id);
+
         modalBody.innerHTML = `
             <div class="lm-block mb-3">
                 <h6 class="lm-block-title">Datos de cobro</h6>
                 <div class="lm-line"><span>Mesa</span><strong>${escapeHtml(mesa.codigo)}</strong></div>
-                <div class="lm-line"><span>Atención</span><strong>#${escapeHtml(formatRecordId(atencion.id))}</strong></div>
+                <div class="lm-line"><span>Atención</span><strong>#${escapeHtml(codigoAtencion)}</strong></div>
                 <div class="lm-line"><span>Tipo de pago</span><strong>${escapeHtml(metodoPago)}</strong></div>
                 <div class="lm-line"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
                 <div class="lm-line"><span>Propina</span><strong>${money(propinaOk)}</strong></div>
@@ -607,26 +609,28 @@
         const confirmBtn = byId('lmConfirmPagoBtn');
         if (confirmBtn) {
             confirmBtn.addEventListener('click', () => {
-                cobrarMesa(atencion, subtotal, metodoPago, propinaOk, false);
+                cobrarMesa(atencion, subtotal, metodoPago, propinaOk, false, detalle.items);
             });
         }
 
         const printBtn = byId('lmConfirmPrintBtn');
         if (printBtn) {
             printBtn.addEventListener('click', () => {
-                cobrarMesa(atencion, subtotal, metodoPago, propinaOk, true);
+                cobrarMesa(atencion, subtotal, metodoPago, propinaOk, true, detalle.items);
             });
         }
     }
 
-    async function cobrarMesa(atencion, subtotal, metodoPago, propinaOk, imprimir) {
+    async function cobrarMesa(atencion, subtotal, metodoPago, propinaOk, imprimir, items = []) {
         const total = round2(Number(subtotal || 0) + Number(propinaOk || 0));
 
         if (apiAvailable() && atencion && atencion.id) {
             try {
                 const response = await api.cobrarAtencion(atencion.id, {
                     metodoPago: metodoPago || 'Efectivo',
+                    subtotal: round2(subtotal),
                     propina: round2(propinaOk),
+                    total: round2(total),
                     observaciones: '',
                     generarComprobante: Boolean(imprimir)
                 });
@@ -634,14 +638,19 @@
                 if (imprimir && response && response.data) {
                     const comprobanteApi = {
                         id: response.data.idComprobante || atencion.id,
-                        fecha: response.data.fechaEmision || new Date().toISOString(),
+                        numeroComprobante: response.data.numeroComprobante || null,
+                        fechaEmision: response.data.fechaEmision || new Date().toISOString(),
                         atencion_id: atencion.id,
+                        codigoAtencion: response.data.codigoAtencion || atencion.codigo || atencion.codigoAtencion || null,
                         mesa_id: Number(atencion.id_mesa),
                         mesa_codigo: state.selected?.codigo || '',
                         metodo_pago: response.data.metodoPago || metodoPago || 'Efectivo',
                         subtotal: Number(response.data.subtotal || subtotal || 0),
                         propina: Number(response.data.propina || propinaOk || 0),
-                        total: Number(response.data.total || total)
+                        total: Number(response.data.total || total),
+                        clienteNombre: response.data.clienteNombre || null,
+                        clienteDocumento: response.data.clienteDocumento || null,
+                        items: Array.isArray(response.data.items) ? response.data.items : items || []
                     };
                     printComprobante(comprobanteApi);
                 }
@@ -671,7 +680,7 @@
         // para que la mesa no vuelva a verse como "reservada" tras cobrar.
         if (atencion.id_reserva) {
             DB.update('reservas', atencion.id_reserva, {
-                estado: 'Atendida',
+                estado: 'Completada',
                 confirmada: true
             });
         }
@@ -698,13 +707,46 @@
     function printComprobante(comprobante) {
         const mesa = DB.getById('mesas', comprobante.mesa_id);
         const atencion = DB.getById('atenciones', comprobante.atencion_id);
-        const cliente = atencion ? DB.getById('clientes', atencion.id_cliente) : null;
+        const cliente = comprobante.clienteNombre
+            ? { nombres: comprobante.clienteNombre, apellidos: '' }
+            : atencion ? DB.getById('clientes', atencion.id_cliente) : null;
         const mesaTexto = mesa ? mesa.codigo : (comprobante.mesa_codigo || `Mesa ${comprobante.mesa_id}`);
+        const comprobanteNumero = comprobante.numeroComprobante || comprobante.id;
+        const comprobanteFecha = comprobante.fechaEmision || comprobante.fecha || new Date().toISOString();
+        const codigoAtencion = comprobante.codigoAtencion || atencion?.codigo || atencion?.codigoAtencion || formatRecordId(comprobante.atencion_id);
+        const clienteNombre = comprobante.clienteNombre || (cliente ? `${cliente.nombres} ${cliente.apellidos}`.trim() : 'Consumidor final');
+
+        const itemRows = Array.isArray(comprobante.items) && comprobante.items.length
+            ? comprobante.items.map((item) => `
+                <tr>
+                    <td>${escapeHtml(item.nombre || item.plato || item.descripcion || item.platoNombre || item.nombreItem || 'Ítem')}</td>
+                    <td style="text-align:center;">${escapeHtml(String(item.cantidad || item.cantidad || 0))}</td>
+                    <td style="text-align:right;">${money(Number(item.precio_unit || item.precioUnit || item.unitario || 0))}</td>
+                    <td style="text-align:right;">${money(Number(item.descuento || 0))}</td>
+                    <td style="text-align:right;">${money(Number(item.subtotal || 0))}</td>
+                </tr>
+            `).join('')
+            : '';
+
+        const detalleHtml = itemRows ? `
+                <table style="width:100%; border-collapse: collapse; margin-top: 12px;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left; border-bottom:1px solid #ddd; padding:6px 4px;">Detalle</th>
+                            <th style="text-align:center; border-bottom:1px solid #ddd; padding:6px 4px;">Cant.</th>
+                            <th style="text-align:right; border-bottom:1px solid #ddd; padding:6px 4px;">P. Unit.</th>
+                            <th style="text-align:right; border-bottom:1px solid #ddd; padding:6px 4px;">Desc.</th>
+                            <th style="text-align:right; border-bottom:1px solid #ddd; padding:6px 4px;">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>${itemRows}</tbody>
+                </table>
+            ` : '';
 
         const html = `
             <html>
             <head>
-                <title>Comprobante #${comprobante.id}</title>
+                <title>Comprobante #${escapeHtml(comprobanteNumero)}</title>
                 <style>
                     body { font-family: Arial, sans-serif; margin: 18px; color: #0f172a; }
                     h3 { margin: 0 0 12px; }
@@ -715,11 +757,13 @@
             </head>
             <body>
                 <h3>Comprobante de Pago</h3>
-                <div class="line"><span>N° comprobante</span><strong>#${escapeHtml(formatRecordId(comprobante.id))}</strong></div>
-                <div class="line"><span>Fecha</span><strong>${escapeHtml(formatDateTime(comprobante.fecha))}</strong></div>
+                <div class="line"><span>N° comprobante</span><strong>#${escapeHtml(comprobanteNumero)}</strong></div>
+                <div class="line"><span>Fecha</span><strong>${escapeHtml(formatDateTime(comprobanteFecha))}</strong></div>
                 <div class="line"><span>Mesa</span><strong>${escapeHtml(mesaTexto)}</strong></div>
-                <div class="line"><span>Cliente</span><strong>${escapeHtml(cliente ? `${cliente.nombres} ${cliente.apellidos}` : 'Consumidor final')}</strong></div>
+                <div class="line"><span>Código de atención</span><strong>${escapeHtml(codigoAtencion)}</strong></div>
+                <div class="line"><span>Cliente</span><strong>${escapeHtml(clienteNombre)}</strong></div>
                 <div class="line"><span>Tipo de pago</span><strong>${escapeHtml(comprobante.metodo_pago || 'Efectivo')}</strong></div>
+                ${detalleHtml}
                 <div class="line"><span>Subtotal</span><strong>${money(comprobante.subtotal)}</strong></div>
                 <div class="line"><span>Propina</span><strong>${money(comprobante.propina)}</strong></div>
                 <div class="line total"><span>Total pagado</span><strong>${money(comprobante.total)}</strong></div>
@@ -1040,6 +1084,7 @@
                 pedidoId: item.idPedido || pedidoActual?.idPedido || '-',
                 platoNombre: item.nombreItem,
                 cantidad: Number(item.cantidad || 0),
+                precioUnit: Number(item.precioUnit || item.precio_unit || 0),
                 estadoPlato: normalizeEstadoPlato(item.estadoCocina),
                 subtotal: round2(item.subtotal || (Number(item.cantidad || 0) * Number(item.precioUnit || 0)))
             }));
@@ -1089,6 +1134,8 @@
                     pedidoId: pedido.id,
                     platoNombre: plato ? plato.nombre : 'Plato no encontrado',
                     cantidad,
+                    precioUnit: precio,
+                    precio_unit: precio,
                     estadoPlato: normalizeEstadoPlato(linea.estado_cocina),
                     subtotal
                 });

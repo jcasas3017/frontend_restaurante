@@ -71,48 +71,48 @@
                 <div class="stat-icon si-orange"><i class="bi bi-tags"></i></div>
                 <div class="stat-body">
                     <div class="stat-label">Categorías activas</div>
-                    <div class="stat-value">3</div>
-                    <div class="stat-note">de 4 registradas</div>
+                    <div class="stat-value" id="dashCategoriasActivas">0</div>
+                    <div class="stat-note" id="dashCategoriasNote">de 0 registradas</div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon si-green"><i class="bi bi-egg-fried"></i></div>
                 <div class="stat-body">
                     <div class="stat-label">Platos disponibles</div>
-                    <div class="stat-value">3</div>
-                    <div class="stat-note">de 4 en carta</div>
+                    <div class="stat-value" id="dashPlatosDisponibles">0</div>
+                    <div class="stat-note" id="dashPlatosNote">de 0 en carta</div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon si-blue"><i class="bi bi-grid-3x3-gap"></i></div>
                 <div class="stat-body">
                     <div class="stat-label">Mesas activas</div>
-                    <div class="stat-value">3</div>
-                    <div class="stat-note">de 4 configuradas</div>
+                    <div class="stat-value" id="dashMesasActivas">0</div>
+                    <div class="stat-note" id="dashMesasNote">de 0 configuradas</div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon si-purple"><i class="bi bi-calendar-check"></i></div>
                 <div class="stat-body">
                     <div class="stat-label">Reservas vigentes</div>
-                    <div class="stat-value">2</div>
-                    <div class="stat-note">1 confirmada</div>
+                    <div class="stat-value" id="dashReservasVigentes">0</div>
+                    <div class="stat-note" id="dashReservasNote">0 confirmadas</div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon si-teal"><i class="bi bi-bell"></i></div>
                 <div class="stat-body">
                     <div class="stat-label">Atenciones en curso</div>
-                    <div class="stat-value">1</div>
-                    <div class="stat-note">1 cerrada hoy</div>
+                    <div class="stat-value" id="dashAtencionesEnCurso">0</div>
+                    <div class="stat-note" id="dashAtencionesNote">0 cerradas hoy</div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon si-rose"><i class="bi bi-receipt"></i></div>
                 <div class="stat-body">
                     <div class="stat-label">Pedidos registrados</div>
-                    <div class="stat-value">2</div>
-                    <div class="stat-note">3 ítems en detalle</div>
+                    <div class="stat-value" id="dashPedidosRegistrados">0</div>
+                    <div class="stat-note" id="dashPedidosNote">0 ítems en detalle</div>
                 </div>
             </div>
         </div>
@@ -134,23 +134,7 @@
                                     <th>#</th><th>Cliente</th><th>Mesa</th><th>Fecha / Hora</th><th>Personas</th><th>Estado</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                <tr>
-                                    <td><span class="record-id">#1</span></td>
-                                    <td><span class="fw-semibold">Lucia Fernandez</span></td>
-                                    <td>M-01 · Ventana</td>
-                                    <td>09/04/2026, 08:00 pm</td>
-                                    <td>4</td>
-                                    <td><span class="badge-pill bp-success"><i class="bi bi-check-circle-fill"></i>Confirmada</span></td>
-                                </tr>
-                                <tr>
-                                    <td><span class="record-id">#2</span></td>
-                                    <td><span class="fw-semibold">Carlos Ramos</span></td>
-                                    <td>T-01 · Terraza</td>
-                                    <td>10/04/2026, 01:00 pm</td>
-                                    <td>3</td>
-                                    <td><span class="badge-pill bp-warning"><i class="bi bi-clock"></i>Pendiente</span></td>
-                                </tr>
+                            <tbody id="dashReservasBody">
                             </tbody>
                         </table>
                     </div>
@@ -167,23 +151,7 @@
                             <thead>
                                 <tr><th>#</th><th>Cliente</th><th>Mesa</th><th>Mozo</th><th>Estado</th><th>Pago</th></tr>
                             </thead>
-                            <tbody>
-                                <tr>
-                                    <td><span class="record-id">#1</span></td>
-                                    <td>Lucia Fernandez</td>
-                                    <td>M-01</td>
-                                    <td>Dario Lopez</td>
-                                    <td><span class="badge-pill bp-info">En curso</span></td>
-                                    <td><span class="badge-pill bp-warning">Pendiente</span></td>
-                                </tr>
-                                <tr>
-                                    <td><span class="record-id">#2</span></td>
-                                    <td>Carlos Ramos</td>
-                                    <td>M-02</td>
-                                    <td>Dario Lopez</td>
-                                    <td><span class="badge-pill bp-gray">Cerrada</span></td>
-                                    <td><span class="badge-pill bp-success">Pagado</span></td>
-                                </tr>
+                            <tbody id="dashAtencionesBody">
                             </tbody>
                         </table>
                     </div>
@@ -222,10 +190,14 @@
 <script src="../js/auth.js"></script>
 <script src="../js/app.js"></script>
 <script src="../js/layout.js"></script>
+<script src="../js/dashboard.js"></script>
 <script>
 (async () => {
     await Layout.loadSharedSidebar();
     Layout.init('dashboard');
+    if (window.Dashboard) {
+        await Dashboard.init();
+    }
 })();
 </script>
 </body>
