@@ -881,7 +881,7 @@
         modalTitle.textContent = `${mesa.codigo} · Mesa reservada`;
         modalBody.innerHTML = `
             <div class="row g-3">
-                <div class="col-md-6">
+                <div class="col-12">
                     <div class="lm-block">
                         <h6 class="lm-block-title">Detalle de reserva</h6>
                         <div class="lm-line"><span>Cliente</span><strong>${escapeHtml(clienteNombre)}</strong></div>
@@ -890,15 +890,9 @@
                         <div class="lm-line"><span>Estado</span><strong>${escapeHtml(reserva ? reserva.estado : 'Reservada')}</strong></div>
                     </div>
                 </div>
-                <div class="col-md-6">
-                    <div class="lm-block">
-                        <h6 class="lm-block-title">Pedidos</h6>
-                        <p class="mb-0 text-muted small">Aún no hay pedidos registrados para esta reserva.</p>
-                    </div>
-                </div>
                 <div class="col-12">
                     <hr class="my-1">
-                    <p class="small text-muted mb-2">Si el cliente llegó, puedes cambiar la mesa a ocupada y registrar pedidos iniciales.</p>
+                    <p class="small text-muted mb-2">Si el cliente llegó, selecciona el mozo y cambia la mesa a ocupada.</p>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Mozo</label>
@@ -908,13 +902,6 @@
                     <label class="form-label">Notas del pedido</label>
                     <input class="form-control" id="lmPedidoNotas" placeholder="Opcional">
                 </div>
-                <div class="col-12">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="mb-0">Platos del pedido</h6>
-                        <button class="btn btn-sm btn-outline-secondary" type="button" id="lmAddItemBtn"><i class="bi bi-plus"></i>Agregar plato</button>
-                    </div>
-                    <div id="lmItemsContainer"></div>
-                </div>
             </div>
         `;
         modalFooter.innerHTML = `
@@ -923,9 +910,6 @@
             <button type="button" class="btn btn-brand" id="lmReservadaToOcupadaBtn"><i class="bi bi-lightning me-1"></i>Cambiar a ocupada</button>
         `;
 
-        initPedidoItemsEditor();
-        const addBtn = byId('lmAddItemBtn');
-        if (addBtn) addBtn.addEventListener('click', addPedidoItemRow);
         const actionBtn = byId('lmReservadaToOcupadaBtn');
         if (actionBtn) actionBtn.addEventListener('click', () => confirmOcuparMesa(mesa, reserva));
         
