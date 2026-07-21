@@ -33,7 +33,9 @@ const Layout = (() => {
         <li><a class="nav-link" href="atenciones.html" data-page="atenciones"><i class="bi bi-bell"></i><span>Atenciones</span></a></li>
         <li><a class="nav-link" href="pedidos.html" data-page="pedidos"><i class="bi bi-receipt"></i><span>Pedidos</span></a></li>
         <li><a class="nav-link" href="pedidos-mesa.html" data-page="pedidosMesa"><i class="bi bi-grid"></i><span>Pedidos por Mesa</span></a></li>
-        
+        <li><a class="nav-link" href="reporte-ventas.html" data-page="reporteVentas"><i class="bi bi-graph-up-arrow"></i><span>Ventas</span></a></li>
+        <li><a class="nav-link" href="reporte-reservas.html" data-page="reporteReservas"><i class="bi bi-calendar2-check"></i><span>Reservas</span></a></li>
+
         <li><a class="nav-link" href="detalle-pedidos.html" data-page="detallePedidos"><i class="bi bi-list-check"></i><span>Detalle Pedidos</span></a></li>
     </ul>
     <div class="sidebar-footer">
