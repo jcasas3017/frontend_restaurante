@@ -248,3 +248,6 @@ client.connect();
 **Generado**: 2026-05-13
 **Versión**: 1.0
 **Base de Datos**: PostgreSQL
+###Levantar back y front
+mvn spring-boot:run
+python3 -m http.server 5500
